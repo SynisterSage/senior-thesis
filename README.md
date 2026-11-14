@@ -1,12 +1,18 @@
 # TrailMark app
 
-React Native + Expo + TypeScript starter for the TrailMark thesis prototype. The TrailMark screens and device connection have not been implemented yet.
+React Native + Expo + TypeScript prototype for TrailMark: a memory-focused hiking experience built around a small screenless physical companion called **Nod**.
+
+TrailMark helps someone prepare for a trail, mark moments without taking out their phone, and reconstruct what those moments meant afterward. Nod is the product focus; the phone app gives each mark place, context, and a way to revisit it.
+
+The current prototype centers on one prepared trail, Grand Prismatic Overlook in Yellowstone. The map flow, phone fallback, sequential demo marks, trail context pins, reflection direction, and archive direction are being developed before broader trail discovery or hardware production work.
+
+See [product direction and MVP status](docs/PRODUCT_DIRECTION.md) for the current scope, decisions, guardrails, and phase plan.
 
 See the [stack decision](../trailmark-idea/08-stack-and-build-plan.md) and [current concept](../trailmark-idea/00-current-writeup.md).
 
 The eventual Bluetooth and locked-phone location flow requires a development build on a physical phone. Expo Go and a browser preview can help with early UI work but cannot validate the wearable.
 
-First technical milestone: create a mark from a button event while the phone is locked, save a timestamp and phone location locally, and acknowledge the successful save.
+First technical hardware milestone: create a mark from a real Nod button event while the phone is locked, save a timestamp and phone location locally, and acknowledge the successful save.
 
 ## Expo starter instructions
 
