@@ -15,6 +15,7 @@ import { getNoticingPrompt, grandPrismaticMoments } from '@/lib/trail-moments';
 import { clearActiveHikeDraft, getActiveHikeDraft, saveActiveHikeDraft, type CapturedTrailMoment } from '@/lib/trail-stories';
 import { isNodConnected } from '@/lib/onboarding';
 import { getLiveMapStyle, type LiveMapStyle } from '@/lib/trailmark-preferences';
+import { startHikeBackgroundTracking, stopHikeBackgroundTracking } from '@/lib/hike-background';
 
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 const fallbackMarkCoordinate: Position = [-110.836, 44.520];
@@ -156,7 +157,7 @@ function isNearbyFeature(anchor: TrailAnchor): anchor is NearbyFeature {
 if (mapboxToken) Mapbox.setAccessToken(mapboxToken);
 
 export default function HikeScreen() {
-  const { slug, notice } = useLocalSearchParams<{ slug?: string; notice?: string }>();
+  const { slug, focusId, notice } = useLocalSearchParams<{ slug?: string; focusId?: string; notice?: string }>();
   const nodConnected = isNodConnected();
   const storedDraft = getActiveHikeDraft();
   const matchingDraft = storedDraft?.slug === (slug ?? 'grand-prismatic-overlook') ? storedDraft : undefined;
@@ -175,10 +176,12 @@ export default function HikeScreen() {
   const [zoomLevel, setZoomLevel] = useState(14.5);
   const [trailName, setTrailName] = useState('Grand Prismatic Overlook');
   const [noticingFocus] = useState(() => matchingDraft?.noticingFocus ?? notice?.trim() ?? '');
+  const [noticingFocusId] = useState(() => matchingDraft?.noticingFocusId ?? focusId);
   const [markedMoments, setMarkedMoments] = useState<CapturedTrailMoment[]>(() => matchingDraft?.marks ?? []);
   const [latestMarkId, setLatestMarkId] = useState<string | null>(() => matchingDraft?.marks[matchingDraft.marks.length - 1]?.id ?? null);
   const [lastMarkedTitle, setLastMarkedTitle] = useState<string | null>(null);
   const [showMarkNotice, setShowMarkNotice] = useState(false);
+  const [nodSheetOpen, setNodSheetOpen] = useState(false);
   const [markNoticeOpacity] = useState(() => new Animated.Value(1));
   const [markNoticeOffset] = useState(() => new Animated.Value(0));
   const [nodConnectionPulse] = useState(() => new Animated.Value(1));
@@ -205,6 +208,7 @@ export default function HikeScreen() {
   const [storyImageOpacity] = useState(() => new Animated.Value(1));
   const [guidanceOpacity] = useState(() => new Animated.Value(1));
   const [guidanceOffset] = useState(() => new Animated.Value(0));
+  const [nodSheetOffset] = useState(() => new Animated.Value(360));
   const guidanceDismissed = useRef(false);
   useFocusEffect(useCallback(() => {
     setLiveMapStyle(getLiveMapStyle());
@@ -234,6 +238,14 @@ export default function HikeScreen() {
       if (trail?.name) setTrailName(trail.name.replace(/ Trail$/, ''));
     });
   }, [slug]);
+
+  useEffect(() => {
+    void startHikeBackgroundTracking();
+    return () => {
+      // The active session remains registered while the app is backgrounded.
+      // It is explicitly stopped when the user finishes or discards the hike.
+    };
+  }, []);
 
   useEffect(() => {
     if (!routeShape || hasPlayedArrivalCamera.current) return;
@@ -299,9 +311,10 @@ export default function HikeScreen() {
   const memoryTrailShape = memoryTrailAlongRoute(routeCoordinates, markedMoments);
   const nearbyFeatureCoordinates = nearbyFeatures;
   const markedCount = markedMoments.length;
+  const nodMarkedCount = markedMoments.filter((moment) => moment.source === 'nod').length;
   const demoComplete = markedCount >= grandPrismaticMoments.length;
   const remainingMoments = Math.max(0, grandPrismaticMoments.length - markedCount);
-  const sessionLabel = markedCount ? `${markedCount} ${markedCount === 1 ? 'moment' : 'moments'} marked` : 'Ready to capture';
+  const sessionLabel = markedCount ? `${markedCount} ${markedCount === 1 ? 'moment' : 'moments'} kept` : 'Ready to keep a moment';
   const activeStoryMoment = storyIndex === null ? undefined : grandPrismaticMoments.find((moment) => moment.id === markedMoments[storyIndex]?.momentId);
   const activeStoryImages = activeStoryMoment?.images ?? (activeStoryMoment?.image ? [activeStoryMoment.image] : [storyMomentImages[(storyIndex ?? 0) % storyMomentImages.length]]);
   const persistDraft = (marks: CapturedTrailMoment[], notes: string[]) => saveActiveHikeDraft({
@@ -311,6 +324,7 @@ export default function HikeScreen() {
     routeCoordinates,
     marks,
     notes,
+    noticingFocusId,
     noticingFocus,
   });
   const markMoment = (source: MarkSource) => {
@@ -358,7 +372,7 @@ export default function HikeScreen() {
   const confirmLeaveHike = () => {
     Alert.alert('Leave this hike?', 'Your captured moments will be discarded, and this trail will start fresh next time.', [
       { text: 'Keep hiking', style: 'cancel' },
-      { text: 'Discard and leave', style: 'destructive', onPress: () => { clearActiveHikeDraft(); router.back(); } },
+      { text: 'Discard and leave', style: 'destructive', onPress: () => { void stopHikeBackgroundTracking(); clearActiveHikeDraft(); router.back(); } },
     ]);
   };
   const returnToHike = () => {
@@ -372,18 +386,23 @@ export default function HikeScreen() {
     storySheetOffset.setValue(420);
     cameraRef.current?.setCamera({ centerCoordinate: routeCenter, zoomLevel: 14.5, pitch: 0, heading: 0, padding: { paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }, animationDuration: 800, animationMode: 'easeTo' });
   };
+  const openNodSheet = () => {
+    setNodSheetOpen(true);
+    Animated.parallel([
+      Animated.timing(actionsOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(actionsOffset, { toValue: 6, duration: 150, useNativeDriver: true }),
+    ]).start();
+    Animated.spring(nodSheetOffset, { toValue: 0, damping: 19, stiffness: 150, useNativeDriver: true }).start();
+  };
+  const closeNodSheet = () => {
+    Animated.timing(nodSheetOffset, { toValue: 360, duration: 180, useNativeDriver: true }).start(() => setNodSheetOpen(false));
+    Animated.parallel([
+      Animated.timing(actionsOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.timing(actionsOffset, { toValue: 0, duration: 180, useNativeDriver: true }),
+    ]).start();
+  };
   const finishHike = () => {
-    const finishMoment = grandPrismaticMoments.find((moment) => moment.routeEnd) ?? grandPrismaticMoments[grandPrismaticMoments.length - 1];
-    const finishAlreadyMarked = markedMoments.some((moment) => moment.momentId === finishMoment.id);
-    if (!finishAlreadyMarked) {
-      const finishCoordinate = routeCoordinates[routeCoordinates.length - 1] ?? fallbackMarkCoordinate;
-      const finalMark: CapturedTrailMoment = { id: `moment-${markSequenceRef.current++}`, momentId: finishMoment.id, coordinate: finishCoordinate, source: nodConnected ? 'nod' : 'phone', createdAt: new Date().toISOString() };
-      const nextMarks = [...markedMoments, finalMark];
-      setMarkedMoments(nextMarks);
-      persistDraft(nextMarks, storyNotes);
-      setLatestMarkId(finalMark.id);
-      setLastMarkedTitle(finishMoment.title);
-    }
+    void stopHikeBackgroundTracking();
     if (storyCameraTimer.current) clearTimeout(storyCameraTimer.current);
     setStoryStyleLoaded(false);
     setStoryIntro(true);
@@ -478,7 +497,7 @@ export default function HikeScreen() {
       setStoryRevealed(false);
       setStorySheetOpen(false);
       cameraRef.current?.setCamera({ centerCoordinate: routeCenter, zoomLevel: 13.2, pitch: 0, heading: 0, animationDuration: 450, animationMode: 'easeTo' });
-      router.push({ pathname: '/recap', params: { markedCount: String(markedMoments.length), notes: JSON.stringify(storyNotes), momentIds: JSON.stringify(markedMoments.map((moment) => moment.momentId)), marks: JSON.stringify(markedMoments), routeCoordinates: JSON.stringify(routeCoordinates), focus: noticingFocus } });
+      router.push({ pathname: '/recap', params: { markedCount: String(markedMoments.length), notes: JSON.stringify(storyNotes), momentIds: JSON.stringify(markedMoments.map((moment) => moment.momentId)), marks: JSON.stringify(markedMoments), routeCoordinates: JSON.stringify(routeCoordinates), focusId: noticingFocusId, focus: noticingFocus } });
       return;
     }
     setStoryIndex(next);
@@ -598,7 +617,7 @@ export default function HikeScreen() {
         {!storyIntro && storyIndex === null && <View style={styles.topBar}>
           <View style={styles.titleBlock}>
             <Text numberOfLines={1} style={styles.title}>{trailName}</Text>
-            <View style={styles.sessionState}><Animated.View style={[styles.connectionIcon, nodConnected && { transform: [{ scale: nodConnectionPulse }] }]}><TrailSymbol name={nodConnected ? 'dot.radiowaves.left.and.right' : 'iphone'} androidName={nodConnected ? 'bluetooth_connected' : 'phone_iphone'} size={13} color="#24794C" /></Animated.View><Text style={styles.subtitle}>{nodConnected ? 'Nod connected' : 'Phone marking'} · {sessionLabel}</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel={nodConnected ? 'Open Nod status' : 'Open phone marking status'} onPress={openNodSheet} style={({ pressed }) => [styles.sessionState, pressed && styles.pressed]}><Animated.View style={[styles.connectionIcon, nodConnected && { transform: [{ scale: nodConnectionPulse }] }]}><TrailSymbol name={nodConnected ? 'dot.radiowaves.left.and.right' : 'iphone'} androidName={nodConnected ? 'bluetooth_connected' : 'phone_iphone'} size={13} color="#24794C" /></Animated.View><Text style={styles.subtitle}>{nodConnected ? 'Nod connected' : 'Phone marking'} · {sessionLabel}</Text><TrailSymbol name="chevron.right" androidName="chevron_right" size={12} color="#718279" /></Pressable>
             {nextWalkTitle ? <Text numberOfLines={1} style={styles.nextWalk}>Next walk · {nextWalkTitle}</Text> : null}
           </View>
         </View>}
@@ -642,31 +661,49 @@ export default function HikeScreen() {
           </Animated.View>
         </> : null}
 
+        {nodSheetOpen && !storyIntro && storyIndex === null ? <>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close Nod status" onPress={closeNodSheet} style={styles.nodSheetDismiss} />
+          <Animated.View style={[styles.nodSheet, selectedAnchor && styles.nodSheetAboveAnchor, { transform: [{ translateY: nodSheetOffset }] }]}> 
+            <View style={styles.sheetHandle} />
+            <View style={styles.nodSheetHeading}>
+              <View style={[styles.connectionIcon, styles.nodSheetIcon]}><TrailSymbol name={nodConnected ? 'dot.radiowaves.left.and.right' : 'iphone'} androidName={nodConnected ? 'bluetooth_connected' : 'phone_iphone'} size={15} color="#24794C" /></View>
+              <View style={styles.nodSheetCopy}><Text style={styles.nodSheetTitle}>{nodConnected ? 'Nod is ready' : 'Phone marking'}</Text><Text style={styles.nodSheetSubtitle}>{nodConnected ? 'Press once when something catches your attention.' : 'You can still keep a moment with your phone.'}</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close Nod status" onPress={closeNodSheet} style={styles.anchorClose}><TrailSymbol name="xmark" androidName="close" size={16} color="#193323" /></Pressable>
+            </View>
+            <View style={styles.nodSheetCount}><Text style={styles.nodSheetCountValue}>{markedCount}</Text><Text style={styles.nodSheetCountLabel}>{markedCount === 1 ? 'moment kept on this walk' : 'moments kept on this walk'}</Text></View>
+            <Pressable accessibilityRole="button" onPress={() => { closeNodSheet(); router.push(nodConnected ? '/settings' : '/pair-nod'); }} style={({ pressed }) => [styles.nodSheetAction, pressed && styles.pressed]}><Text style={styles.nodSheetActionText}>{nodConnected ? 'Manage Nod' : 'Set up Nod'}</Text><TrailSymbol name="arrow.up.right" androidName="north_east" size={16} color="#FFFFFF" /></Pressable>
+            <Pressable accessibilityRole="button" onPress={closeNodSheet} style={({ pressed }) => [styles.nodSheetSecondary, pressed && styles.pressed]}><Text style={styles.nodSheetSecondaryText}>Back to the walk</Text></Pressable>
+          </Animated.View>
+        </> : null}
+
         {storyIntro ? <View style={styles.storyIntro}>
           <View style={styles.storyIntroHeader}><Text accessibilityRole="header" style={styles.storyTitle}>You’re back.</Text><Pressable accessibilityRole="button" accessibilityLabel="Skip revisiting for now and return to hike" onPress={returnToHike} style={styles.storyIntroClose}><TrailSymbol name="xmark" androidName="close" size={16} color="#4D5E53" /></Pressable></View>
-          <Text style={styles.storyDescription}>{markedCount ? `${markedCount} ${markedCount === 1 ? 'moment is' : 'moments are'} waiting along this walk.` : 'There are no moments marked on this walk yet.'}</Text>
+          <Text style={styles.storyDescription}>{markedCount ? `${nodMarkedCount ? `Nod helped you keep ${nodMarkedCount} ${nodMarkedCount === 1 ? 'moment' : 'moments'}. ` : ''}${markedCount === 1 ? 'Your moment is' : 'Your moments are'} waiting along this walk.` : 'There are no moments kept on this walk yet.'}</Text>
           {markedCount > 0 ? <Pressable accessibilityRole="button" onPress={startStory} style={styles.storyButton}><Text style={styles.storyButtonText}>Begin revisiting →</Text></Pressable> : null}
           <Pressable accessibilityRole="button" onPress={returnToHike} style={styles.storyBack}><Text style={styles.storyBackText}>Skip for now</Text></Pressable>
         </View> : storyIndex === null ? <View style={styles.bottomArea}>
-          {showGuidance && !demoComplete ? (
-            <Animated.View pointerEvents="none" style={[styles.statusCard, { opacity: guidanceOpacity, transform: [{ translateY: guidanceOffset }] }]}>
-              <View style={styles.statusIcon}><TrailSymbol name={nodConnected ? 'dot.radiowaves.left.and.right' : 'iphone'} androidName={nodConnected ? 'bluetooth_connected' : 'phone_iphone'} size={17} color="#DDF2E3" /></View>
-              <View style={styles.statusCopy}>
-                <Text style={styles.statusTitle}>{markedCount ? `${markedCount} moment${markedCount === 1 ? '' : 's'} captured` : nodConnected ? 'Nod is ready' : 'Ready to mark'}</Text>
-                <Text style={styles.statusText}>{markedCount ? `${remainingMoments} more ${remainingMoments === 1 ? 'moment' : 'moments'} in this demo route.` : nodConnected ? 'Press Nod once when something catches your attention.' : 'Press when a moment is worth keeping.'}</Text>
-              </View>
-            </Animated.View>
-          ) : null}
-          {showMarkNotice ? <Animated.View pointerEvents="none" style={[styles.markNotice, { opacity: markNoticeOpacity, transform: [{ translateY: markNoticeOffset }] }]}><View style={styles.markNoticeIcon}><TrailSymbol name="checkmark" androidName="check" size={15} color="#FFFFFF" /></View><View style={styles.statusCopy}><Text style={styles.statusTitle}>{nodConnected ? 'Nod marked' : 'Moment marked'}</Text><Text style={styles.statusText}>{lastMarkedTitle ?? 'You can make sense of it after the hike.'}</Text></View></Animated.View> : null}
+          <Animated.View pointerEvents="none" style={[styles.bottomFeedback, { opacity: actionsOpacity, transform: [{ translateY: actionsOffset }] }]}>
+            {showGuidance && !demoComplete ? (
+              <Animated.View style={[styles.statusCard, { opacity: guidanceOpacity, transform: [{ translateY: guidanceOffset }] }]}>
+                <View style={styles.statusIcon}><TrailSymbol name={nodConnected ? 'dot.radiowaves.left.and.right' : 'iphone'} androidName={nodConnected ? 'bluetooth_connected' : 'phone_iphone'} size={17} color="#DDF2E3" /></View>
+                <View style={styles.statusCopy}>
+                  <Text style={styles.statusTitle}>{markedCount ? `${markedCount} moment${markedCount === 1 ? '' : 's'} captured` : nodConnected ? 'Nod is ready' : 'Ready to mark'}</Text>
+                  <Text style={styles.statusText}>{markedCount ? `${remainingMoments} more ${remainingMoments === 1 ? 'moment' : 'moments'} in this demo route.` : nodConnected ? 'Press Nod once when something catches your attention.' : 'Press when a moment is worth keeping.'}</Text>
+                </View>
+              </Animated.View>
+            ) : null}
+            {showMarkNotice ? <Animated.View style={[styles.markNotice, { opacity: markNoticeOpacity, transform: [{ translateY: markNoticeOffset }] }]}><View style={styles.markNoticeIcon}><TrailSymbol name="checkmark" androidName="check" size={15} color="#FFFFFF" /></View><View style={styles.statusCopy}><Text style={styles.statusTitle}>{nodConnected ? 'Nod marked' : 'Moment marked'}</Text><Text style={styles.statusText}>{lastMarkedTitle ?? 'You can make sense of it after the hike.'}</Text></View></Animated.View> : null}
+          </Animated.View>
           <Animated.View pointerEvents={selectedAnchor ? 'none' : 'auto'} style={[styles.actions, { opacity: actionsOpacity, transform: [{ translateY: actionsOffset }] }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel={demoComplete ? 'All demo moments captured' : nodConnected ? 'Use phone instead to mark a moment' : 'Mark a moment'} disabled={demoComplete} onPress={() => markMoment(nodConnected ? 'phone' : 'nod')} style={({ pressed }) => [styles.markButton, nodConnected && styles.phoneMarkButton, demoComplete && styles.markButtonComplete, pressed && styles.pressed]}>
-              <TrailSymbol name={nodConnected ? 'iphone' : 'circle.fill'} androidName={nodConnected ? 'phone_iphone' : 'radio_button_checked'} size={17} color="#193323" />
-              <Text style={styles.markText}>{demoComplete ? 'Moments captured' : nodConnected ? 'Use phone instead' : 'Mark moment'}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={demoComplete ? 'All demo moments captured' : nodConnected ? 'Mark with Nod' : 'Mark a moment'} disabled={demoComplete} onPress={() => markMoment(nodConnected ? 'nod' : 'phone')} style={({ pressed }) => [styles.markButton, demoComplete && styles.markButtonComplete, pressed && styles.pressed]}>
+              <TrailSymbol name={nodConnected ? 'hand.tap.fill' : 'circle.fill'} androidName={nodConnected ? 'touch_app' : 'radio_button_checked'} size={17} color="#193323" />
+              <Text style={styles.markText}>{demoComplete ? 'Moments captured' : nodConnected ? 'Mark with Nod' : 'Mark moment'}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Finish hike" onPress={finishHike} style={({ pressed }) => [styles.finishButton, pressed && styles.pressed]}>
               <Text style={styles.finishText}>Finish</Text>
             </Pressable>
           </Animated.View>
+          {nodConnected && !demoComplete ? <Pressable accessibilityRole="button" accessibilityLabel="Use phone instead to mark a moment" onPress={() => markMoment('phone')} style={({ pressed }) => [styles.phoneFallback, pressed && styles.pressed]}><Text style={styles.phoneFallbackText}>Use phone instead</Text></Pressable> : null}
           <View pointerEvents="none" style={[styles.attribution, styles.attributionLight]}><Text style={[styles.attributionText, styles.attributionTextLight]}>© Mapbox · © OpenStreetMap</Text></View>
         </View> : null}
         {storyIndex !== null && storySheetOpen ? <View pointerEvents="none" style={styles.storyScrim} /> : null}
@@ -687,7 +724,7 @@ export default function HikeScreen() {
                 <Image source={activeStoryImages[storyImageIndex % activeStoryImages.length]} contentFit="cover" style={styles.chapterImage} />
               </Animated.View>
               <View style={styles.chapterRevealHeading}>
-                <View style={styles.chapterMomentPill}><Text style={styles.chapterMomentPillText}>Your marked moment</Text></View>
+                <View style={styles.chapterMomentPill}><Text style={styles.chapterMomentPillText}>{markedMoments[storyIndex]?.source === 'nod' ? 'Kept with Nod' : 'Marked with phone'}</Text></View>
                 <Text style={styles.chapterPlace}>{activeStoryMoment?.title}</Text>
               </View>
               <Text style={styles.chapterContext}>{activeStoryMoment?.context}</Text>
@@ -877,6 +914,21 @@ const styles = StyleSheet.create({
   anchorPlanButton: { minHeight: 48, marginTop: 3, borderRadius: 14, backgroundColor: '#226C4A', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   anchorPlanButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   anchorClose: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EAF1EC' },
+  nodSheetDismiss: { ...StyleSheet.absoluteFill, zIndex: 20, backgroundColor: 'rgba(12, 25, 17, 0.18)' },
+  nodSheet: { position: 'absolute', left: 10, right: 10, bottom: 8, zIndex: 21, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#F5F7F3', shadowColor: '#193323', shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 10 },
+  nodSheetAboveAnchor: { bottom: 104 },
+  nodSheetHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  nodSheetIcon: { width: 36, height: 36, borderRadius: 18, marginTop: 1 },
+  nodSheetCopy: { flex: 1, gap: 3 },
+  nodSheetTitle: { color: '#193323', fontSize: 18, fontWeight: '800', letterSpacing: -0.2 },
+  nodSheetSubtitle: { color: '#4D6053', fontSize: 14, lineHeight: 20 },
+  nodSheetCount: { flexDirection: 'row', alignItems: 'baseline', gap: 7, marginTop: 20, padding: 14, borderRadius: 16, backgroundColor: '#E5F0E6' },
+  nodSheetCountValue: { color: '#226C4A', fontSize: 24, fontWeight: '800' },
+  nodSheetCountLabel: { color: '#4D6053', fontSize: 14, fontWeight: '700' },
+  nodSheetAction: { minHeight: 52, marginTop: 12, borderRadius: 16, backgroundColor: '#226C4A', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  nodSheetActionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  nodSheetSecondary: { alignItems: 'center', paddingVertical: 12 },
+  nodSheetSecondaryText: { color: '#4D6053', fontSize: 14, fontWeight: '700' },
   nextWalk: { color: '#24794C', fontSize: 12, fontWeight: '700', marginTop: 2 },
   attribution: { alignSelf: 'flex-start', marginLeft: 2, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6 },
   attributionLight: { backgroundColor: 'rgba(255,255,255,0.72)' },
@@ -885,6 +937,7 @@ const styles = StyleSheet.create({
   attributionTextLight: { color: '#53645A' },
   attributionTextDark: { color: '#B9CFC1' },
   bottomArea: { gap: 10 },
+  bottomFeedback: { gap: 10 },
   statusCard: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13, borderRadius: 18, backgroundColor: 'rgba(19, 39, 29, 0.94)', borderWidth: 1, borderColor: '#345640' },
   markNotice: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13, borderRadius: 18, backgroundColor: 'rgba(19, 39, 29, 0.96)', borderWidth: 1, borderColor: '#4D8A61' },
   statusIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#24794C' },
@@ -894,7 +947,8 @@ const styles = StyleSheet.create({
   statusText: { color: '#B9D2C0', fontSize: 12, lineHeight: 17 },
   actions: { flexDirection: 'row', gap: 10 },
   markButton: { flex: 1, minHeight: 56, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#A8DFB6' },
-  phoneMarkButton: { backgroundColor: 'rgba(255,255,255,0.94)', borderWidth: 1, borderColor: '#D7E3DD' },
+  phoneFallback: { alignSelf: 'center', minHeight: 34, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  phoneFallbackText: { color: '#D7E5DB', fontSize: 13, fontWeight: '700' },
   markButtonComplete: { backgroundColor: '#DDE9E1', borderColor: '#DDE9E1' },
   markText: { color: '#193323', fontSize: 16, fontWeight: '800' },
   finishButton: { minWidth: 94, minHeight: 56, paddingHorizontal: 18, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EB7657' },

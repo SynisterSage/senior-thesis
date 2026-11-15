@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 
 import { colors } from '@/constants/trailmark-theme';
+import '@/lib/hike-background';
 
 export default function RootLayout() {
   const palette = colors.light;
@@ -11,11 +12,14 @@ export default function RootLayout() {
       headerStyle: { backgroundColor: palette.background },
       contentStyle: { backgroundColor: palette.background },
     }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade', animationDuration: 220, animationTypeForReplace: 'push' }} />
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="pair-nod" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
+      <Stack.Screen name="saved-trails" options={{ headerShown: false }} />
+      <Stack.Screen name="around-you" options={{ headerShown: false }} />
+      <Stack.Screen name="noticing-focus" options={{ headerShown: false }} />
       <Stack.Screen name="trail-preview" options={{ headerShown: false }} />
       <Stack.Screen name="trail-stories" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="hike" options={{ headerShown: false }} />

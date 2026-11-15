@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
@@ -29,15 +29,17 @@ export default function PairNodScreen() {
 
   return <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
     <StatusBar style="dark" />
-    <View style={styles.topbar}><Text style={styles.brand}>TRAILMARK</Text></View>
     <View style={styles.content}>
       <Text accessibilityRole="header" style={styles.title}>{pairingState === 'connected' ? 'That came through.' : pairingState === 'listening' ? 'Find your Nod.' : 'Meet Nod.'}</Text>
       <Text style={styles.description}>{pairingState === 'connected' ? 'Nod is ready to keep a moment while you keep moving.' : pairingState === 'listening' ? 'Press Nod once to connect it to this hike.' : 'A quiet way to keep something that catches your attention.'}</Text>
       <NodDevice state={pairingState} onPress={confirmButtonPress} />
-      <Text accessibilityLiveRegion="polite" style={styles.status}>{pairingState === 'ready' ? 'Ready when you are' : pairingState === 'listening' ? 'Listening for Nod…' : 'Connected and ready'}</Text>
+      <View style={styles.statusRow}>
+        {pairingState === 'listening' ? <ListeningIndicator /> : <View style={[styles.statusDot, pairingState === 'connected' && styles.statusDotConnected]} />}
+        <Text accessibilityLiveRegion="polite" style={styles.status}>{pairingState === 'ready' ? 'Ready when you are' : pairingState === 'listening' ? 'Listening for Nod…' : 'Connected and ready'}</Text>
+      </View>
     </View>
     <View style={styles.actions}>
-      {pairingState === 'ready' ? <><Action label="Bring Nod to life" onPress={beginPairing} /><Pressable accessibilityRole="button" onPress={finish} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Set up later</Text></Pressable></> : null}
+      {pairingState === 'ready' ? <><Pressable accessibilityRole="button" onPress={finish} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Set up later</Text></Pressable><Action label="Bring Nod to life" onPress={beginPairing} /></> : null}
       {pairingState === 'listening' ? <Action label="Press the device above" disabled onPress={() => {}} /> : null}
       {pairingState === 'connected' ? <Action label="Start exploring" onPress={finish} /> : null}
     </View>
@@ -47,10 +49,56 @@ export default function PairNodScreen() {
 function NodDevice({ state, onPress }: { state: PairingState; onPress: () => void }) {
   const connected = state === 'connected';
   const canPress = state === 'listening';
-  return <Pressable accessibilityRole="button" accessibilityLabel={canPress ? 'Press Nod to connect' : connected ? 'Nod connected' : 'Nod device'} accessibilityState={{ disabled: !canPress }} disabled={!canPress} onPress={onPress} style={({ pressed }) => [styles.device, connected && styles.deviceConnected, canPress && styles.deviceListening, pressed && styles.devicePressed]}>
-    <Image pointerEvents="none" source={nodAsset} contentFit="contain" style={styles.deviceImage} />
-    <View style={[styles.deviceLight, connected && styles.deviceLightConnected, canPress && styles.deviceLightListening]}>{state === 'listening' ? <ActivityIndicator size="small" color="#D8E9DA" /> : null}</View>
+  const [pulse] = useState(() => new Animated.Value(0));
+  const [connectionProgress] = useState(() => new Animated.Value(1));
+  const [connectionPulse] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!canPress) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [canPress, pulse]);
+
+  useEffect(() => {
+    if (!connected) {
+      connectionProgress.setValue(1);
+      connectionPulse.setValue(0);
+      return;
+    }
+    connectionProgress.setValue(0);
+    connectionPulse.setValue(0);
+    const reveal = Animated.spring(connectionProgress, { toValue: 1, damping: 13, stiffness: 180, mass: 0.65, useNativeDriver: true });
+    const pulseAnimation = Animated.sequence([
+      Animated.timing(connectionPulse, { toValue: 1, duration: 420, useNativeDriver: true }),
+      Animated.timing(connectionPulse, { toValue: 0, duration: 620, useNativeDriver: true }),
+    ]);
+    reveal.start();
+    pulseAnimation.start();
+    return () => {
+      reveal.stop();
+      pulseAnimation.stop();
+    };
+  }, [connected, connectionProgress, connectionPulse]);
+
+  return <Pressable accessibilityRole="button" accessibilityLabel={canPress ? 'Press Nod to connect' : connected ? 'Nod connected' : 'Nod device'} accessibilityState={{ disabled: !canPress }} disabled={!canPress} onPress={onPress} style={({ pressed }) => [styles.device, canPress && styles.deviceListening, pressed && styles.devicePressed]}>
+    {canPress ? <Animated.View pointerEvents="none" style={[styles.listeningAura, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.42, 0] }), transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1.16] }) }] }]} /> : null}
+    {connected ? <Animated.View pointerEvents="none" style={[styles.connectedGlow, { opacity: connectionPulse.interpolate({ inputRange: [0, 1], outputRange: [0, 0.72] }), transform: [{ scale: connectionPulse.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.2] }) }] }]} /> : null}
+    <Animated.View pointerEvents="none" style={[styles.deviceImageWrap, { opacity: connectionProgress.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }), transform: [{ scale: connectionProgress.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }, { scale: connectionPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.055] }) }] }]}>
+      <Image source={nodAsset} contentFit="contain" style={styles.deviceImage} />
+    </Animated.View>
   </Pressable>;
+}
+
+function ListeningIndicator() {
+  return <View style={styles.listeningIndicator}><View style={styles.listeningIndicatorCore} /></View>;
 }
 
 function Action({ label, disabled = false, onPress }: { label: string; disabled?: boolean; onPress: () => void }) {
@@ -59,8 +107,7 @@ function Action({ label, disabled = false, onPress }: { label: string; disabled?
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.background },
-  topbar: { height: 54, justifyContent: 'center', paddingHorizontal: 25 }, brand: { color: palette.text, fontSize: 11, fontWeight: '800', letterSpacing: 1.8 },
-  content: { flex: 1, alignItems: 'center', paddingHorizontal: 26, paddingTop: 64 }, title: { color: palette.text, fontSize: 33, lineHeight: 39, fontWeight: '700', letterSpacing: -1, textAlign: 'center' }, description: { maxWidth: 300, color: palette.secondary, fontSize: 16, lineHeight: 23, textAlign: 'center', marginTop: 12 },
-  device: { width: 246, height: 194, alignItems: 'center', justifyContent: 'center', marginTop: 43 }, deviceConnected: { transform: [{ scale: 1.02 }] }, deviceListening: { shadowColor: '#A9D7AE', shadowOpacity: 0.55, shadowRadius: 22, elevation: 10 }, devicePressed: { transform: [{ scale: 0.975 }] }, deviceImage: { width: '100%', height: '100%' }, deviceLight: { position: 'absolute', bottom: 12, width: 34, height: 5, alignItems: 'center', justifyContent: 'center', borderRadius: 3, backgroundColor: 'transparent' }, deviceLightConnected: { backgroundColor: '#A9D7AE', shadowColor: '#A9D7AE', shadowOpacity: 0.85, shadowRadius: 8, elevation: 5 }, deviceLightListening: { backgroundColor: '#A9D7AE' }, status: { minHeight: 22, color: palette.secondary, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 31 },
-  actions: { paddingHorizontal: 25, paddingBottom: 17 }, action: { height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: palette.accent }, actionDisabled: { backgroundColor: '#5C8169' }, actionPressed: { opacity: 0.84, transform: [{ scale: 0.99 }] }, actionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' }, secondaryAction: { height: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 }, secondaryActionText: { color: palette.secondary, fontSize: 15, fontWeight: '600' },
+  content: { flex: 1, alignItems: 'center', paddingHorizontal: 26, paddingTop: 64 }, title: { color: palette.text, fontSize: 33, lineHeight: 39, fontWeight: '700', letterSpacing: -1, textAlign: 'center' }, description: { width: '100%', maxWidth: 300, height: 46, color: palette.secondary, fontSize: 16, lineHeight: 23, textAlign: 'center', textAlignVertical: 'center', marginTop: 12 },
+  device: { width: 246, height: 194, alignItems: 'center', justifyContent: 'center', marginTop: 43 }, deviceListening: { shadowColor: '#A9D7AE', shadowOpacity: 0.55, shadowRadius: 22, elevation: 10 }, devicePressed: { transform: [{ scale: 0.975 }] }, deviceImageWrap: { width: '100%', height: '100%' }, deviceImage: { width: '100%', height: '100%' }, connectedGlow: { position: 'absolute', width: 190, height: 190, borderRadius: 95, backgroundColor: '#CFEAD2', shadowColor: '#A9D7AE', shadowOpacity: 0.7, shadowRadius: 26, elevation: 10 }, listeningAura: { position: 'absolute', width: 210, height: 210, borderRadius: 105, backgroundColor: '#DDF0DF', shadowColor: '#A9D7AE', shadowOpacity: 0.38, shadowRadius: 30, elevation: 10 }, statusRow: { minHeight: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 31 }, status: { color: palette.secondary, fontSize: 14, fontWeight: '600', textAlign: 'center' }, statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#B9C7BB' }, statusDotConnected: { backgroundColor: '#78B986' }, listeningIndicator: { width: 10, height: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 5, backgroundColor: '#D9ECDD' }, listeningIndicatorCore: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#4D9960' },
+  actions: { position: 'absolute', left: 0, right: 0, bottom: 0, minHeight: 116, justifyContent: 'flex-end', paddingHorizontal: 25, paddingBottom: 17 }, action: { height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: palette.accent }, actionDisabled: { backgroundColor: '#5C8169' }, actionPressed: { opacity: 0.84, transform: [{ scale: 0.99 }] }, actionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' }, secondaryAction: { height: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }, secondaryActionText: { color: palette.secondary, fontSize: 15, fontWeight: '600' },
 });

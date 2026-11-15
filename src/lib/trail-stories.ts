@@ -20,10 +20,12 @@ export type SavedTrailStory = {
   notes: string[];
   marks?: CapturedTrailMoment[];
   routeCoordinates?: number[][];
+  noticingFocusId?: string;
   noticingFocus?: string;
-  noticeTheme?: 'water' | 'living' | 'earth';
+  noticeTheme?: 'default' | 'water' | 'living' | 'earth';
   mapMood?: string;
   storyThread?: string;
+  additions?: Record<string, { imageIndex?: number; thought?: string }>;
 };
 
 type NewTrailStory = Omit<SavedTrailStory, 'id' | 'createdAt'>;
@@ -35,8 +37,11 @@ export type ActiveHikeDraft = {
   routeCoordinates: number[][];
   marks: CapturedTrailMoment[];
   notes: string[];
+  noticingFocusId?: string;
   noticingFocus?: string;
-  noticeTheme?: 'water' | 'living' | 'earth';
+  lastLocation?: number[];
+  lastLocationAt?: string;
+  noticeTheme?: 'default' | 'water' | 'living' | 'earth';
   updatedAt: string;
 };
 

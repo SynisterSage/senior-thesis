@@ -10,7 +10,7 @@ import { getNoticingPrompt, grandPrismaticMoments } from '@/lib/trail-moments';
 const palette = colors.light;
 
 export default function ReflectScreen() {
-  const { markedCount, momentIds: momentIdsParam, coordinates: coordinatesParam, focus, noticeTheme } = useLocalSearchParams<{ markedCount?: string; momentIds?: string; coordinates?: string; focus?: string; noticeTheme?: string }>();
+  const { markedCount, momentIds: momentIdsParam, coordinates: coordinatesParam, focusId, focus, noticeTheme } = useLocalSearchParams<{ markedCount?: string; momentIds?: string; coordinates?: string; focusId?: string; focus?: string; noticeTheme?: string }>();
   const cameraRef = useRef<Mapbox.Camera>(null);
   const coordinates = useMemo<number[][]>(() => {
     try { const parsed = JSON.parse(coordinatesParam ?? '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
@@ -71,7 +71,7 @@ export default function ReflectScreen() {
         <View style={styles.completeMark}><Text style={styles.completeCheck}>✓</Text></View>
         <Text accessibilityRole="header" style={styles.completeTitle}>{total ? 'That is the walk, for now.' : 'This walk is still worth keeping.'}</Text>
         <Text style={styles.completeText}>{total ? 'Your memories are ready to become a trail story.' : 'Return to the trail when something feels worth holding onto.'}</Text>
-        <ActionButton label="Build my trail story" onPress={() => router.replace({ pathname: '/recap', params: { markedCount: String(total), notes: JSON.stringify(notes), momentIds: JSON.stringify(momentIds), focus: noticingFocus, noticeTheme } })} />
+        <ActionButton label="Build my trail story" onPress={() => router.replace({ pathname: '/recap', params: { markedCount: String(total), notes: JSON.stringify(notes), momentIds: JSON.stringify(momentIds), focusId, focus: noticingFocus, noticeTheme } })} />
       </ReflectShell>
     );
   }

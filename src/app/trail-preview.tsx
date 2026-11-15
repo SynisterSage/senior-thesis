@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/constants/trailmark-theme';
 import { getPublishedTrail, type Trail } from '@/lib/trails';
 import { getTrailNoticingSuggestion } from '@/lib/trail-noticing';
+import { getNoticingFocus } from '@/lib/noticing-focuses';
 import { isNodConnected } from '@/lib/onboarding';
 
 const palette = colors.light;
@@ -50,19 +51,20 @@ const photoTourSlides = [
 ] as const;
 
 export default function TrailPreviewScreen() {
-  const { slug } = useLocalSearchParams<{ slug?: string }>();
+  const { slug, focusId, notice } = useLocalSearchParams<{ slug?: string; focusId?: string; notice?: string }>();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const photoTourScrollRef = useRef<ScrollViewInstance>(null);
   const suggestion = getTrailNoticingSuggestion(slug);
+  const selectedFocus = getNoticingFocus(focusId);
   const [trail, setTrail] = useState<Trail | null>(null);
-  const [customNotice, setCustomNotice] = useState(() => suggestion?.focus ?? '');
+  const [customNotice, setCustomNotice] = useState(() => notice?.trim() ?? selectedFocus?.focus ?? suggestion?.focus ?? '');
   const [noticeSaved, setNoticeSaved] = useState(false);
   const [saved, setSaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [photoTourOpen, setPhotoTourOpen] = useState(false);
   const [photoTourIndex, setPhotoTourIndex] = useState(0);
   const nodConnected = isNodConnected();
-  const suggestionStatus = !customNotice.trim() ? 'Optional' : customNotice.trim() === suggestion?.focus ? 'For this trail' : 'Your detail';
+  const suggestionStatus = selectedFocus ? 'Your lens' : !customNotice.trim() ? 'Optional' : customNotice.trim() === suggestion?.focus ? 'For this trail' : 'Your detail';
 
   useEffect(() => {
     if (!slug) return;
@@ -92,7 +94,7 @@ export default function TrailPreviewScreen() {
 
   const startTrip = () => router.push({
     pathname: '/hike',
-    params: { slug: trail?.slug ?? slug ?? 'grand-prismatic-overlook', notice: customNotice.trim() },
+    params: { slug: trail?.slug ?? slug ?? 'grand-prismatic-overlook', focusId, notice: customNotice.trim() },
   });
 
   const openPhotoTour = () => {
@@ -199,10 +201,16 @@ export default function TrailPreviewScreen() {
           </View>
 
           <View style={styles.mediaRow}>
-            <View style={[styles.mediaTile, styles.nodTile]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={nodConnected ? 'Manage Nod in Settings' : 'Open Nod settings'}
+              onPress={() => router.push('/settings')}
+              style={({ pressed }) => [styles.mediaTile, styles.nodTile, pressed && styles.pressed]}
+            >
               <Image source={nodAsset} contentFit="contain" style={styles.nodTileImage} />
-              <Text style={styles.nodTileLabel}>{nodConnected ? 'Nod ready' : 'Phone marking'}</Text>
-            </View>
+              <Text style={styles.nodTileLabel}>{nodConnected ? 'Nod ready' : 'Set up Nod'}</Text>
+              <Text style={styles.nodTileDetail}>{nodConnected ? 'Press to keep a moment' : 'Use your phone if needed'}</Text>
+            </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Open photo tour" onPress={openPhotoTour} style={({ pressed }) => [styles.mediaTile, pressed && styles.pressed]}>
               <Image source={trailImagesPhoto} contentFit="cover" style={styles.mediaImage} />
               <View style={styles.mediaShade} />
@@ -219,7 +227,7 @@ export default function TrailPreviewScreen() {
 
             <View style={styles.noticeBlock}>
               <View style={styles.noticeHeading}>
-                <Text style={styles.smallTitle}>What do you want to notice?</Text>
+                <Text style={styles.smallTitle}>{selectedFocus ? `Your lens · ${selectedFocus.title}` : 'What do you want to notice?'}</Text>
                 <View style={styles.suggestionTag}><TrailSymbol name="sparkles" androidName="auto_awesome" size={14} color={palette.accent} /><Text style={styles.suggestionTagText}>{suggestionStatus}</Text></View>
               </View>
               <View style={styles.noticeInputShell}>
@@ -376,6 +384,7 @@ const styles = StyleSheet.create({
   nodTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F4EF' },
   nodTileImage: { width: 118, height: 86, marginTop: -4 },
   nodTileLabel: { color: palette.secondary, fontSize: 11, fontWeight: '800', marginTop: -7 },
+  nodTileDetail: { color: '#7A897E', fontSize: 10, fontWeight: '600', marginTop: 3 },
   mediaImage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   mediaShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(12, 25, 17, 0.24)' },
   mediaPlay: { position: 'absolute', left: '50%', top: '50%', width: 38, height: 38, marginLeft: -19, marginTop: -19, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(26, 50, 37, 0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)' },

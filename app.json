@@ -43,7 +43,16 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "TrailMark uses your location to place moments along your hike."
+          "locationWhenInUsePermission": "TrailMark uses your location to place moments along your hike.",
+          "locationAlwaysAndWhenInUsePermission": "TrailMark keeps your active hike ready when your phone is locked.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TrailMark uses your photos to create a shareable trail story."
         }
       ],
       "expo-sharing"
