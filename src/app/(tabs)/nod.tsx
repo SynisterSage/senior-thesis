@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
+import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isNodConnected } from '@/lib/onboarding';
@@ -29,7 +30,7 @@ export default function NodScreen() {
   return <View style={styles.screen}>
     <StatusBar style="dark" />
     <SafeAreaView edges={['top']} style={styles.safeTop}>
-      <View style={styles.header} />
+      <View style={styles.header}><Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')} style={({ pressed }) => [styles.settingsButton, pressed && styles.settingsButtonPressed]}><SymbolView name={{ ios: 'gearshape' as never, android: 'settings' as never, web: 'settings' as never }} size={19} weight="medium" tintColor={palette.secondary} /></Pressable></View>
     </SafeAreaView>
 
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -60,7 +61,9 @@ export default function NodScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.background },
   safeTop: { backgroundColor: palette.background },
-  header: { height: 22 },
+  header: { height: 44, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 18 },
+  settingsButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E9E8' },
+  settingsButtonPressed: { opacity: 0.68 },
   content: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 26, paddingTop: 28, paddingBottom: 132 },
   intro: { width: '100%', maxWidth: 420, alignItems: 'center' },
   headline: { color: palette.text, fontSize: 30, lineHeight: 35, fontWeight: '700', letterSpacing: -0.9, textAlign: 'center' },

@@ -14,6 +14,7 @@ import { grandPrismaticMoments, type PreparedTrailMoment } from '@/lib/trail-mom
 import { clearActiveHikeDraft, getSavedTrailStory, saveTrailStory, updateTrailStory, type CapturedTrailMoment } from '@/lib/trail-stories';
 import { getPublishedTrail } from '@/lib/trails';
 import { getNoticingThemeId, noticingThemes } from '@/constants/trailmark-theme';
+import { getIncludeWords, getReplayPace } from '@/lib/trailmark-preferences';
 
 const center: Position = [-110.836, 44.520];
 const token = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -132,8 +133,8 @@ function Composer({ route, moments, title, focus, initialNoticeTheme, initialMap
   const [playing, setPlaying] = useState(false);
   const [finished, setFinished] = useState(false);
   const [mapStyle, setMapStyle] = useState<StoryMapStyle>(initialMapMood);
-  const [showNotes, setShowNotes] = useState(true);
-  const [speed, setSpeed] = useState(3600);
+  const [showNotes, setShowNotes] = useState(getIncludeWords);
+  const [speed, setSpeed] = useState(() => getReplayPace() === 'quick' ? 2400 : 3600);
   const [addTarget, setAddTarget] = useState<number | null>(null);
   const [addMode, setAddMode] = useState<'menu' | 'photo' | 'thought'>('menu');
   const [additions, setAdditions] = useState<Record<number, MomentAddition>>({});

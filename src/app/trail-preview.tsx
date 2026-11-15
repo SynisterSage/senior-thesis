@@ -1,11 +1,12 @@
 import Mapbox from '@rnmapbox/maps';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '@/constants/trailmark-theme';
@@ -21,14 +22,45 @@ if (mapboxToken) Mapbox.setAccessToken(mapboxToken);
 const heroImage = require('../../assets/trails/grand-prismatic/overlook.jpg');
 const trailImagesPhoto = require('../../assets/trails/grand-prismatic/spring.jpg');
 const nodAsset = require('../../assets/images/transparent-nod.png');
+const photoTourSlides = [
+  {
+    image: require('../../assets/trails/grand-prismatic/firehole-bridge.jpg'),
+    title: 'Begin near the Firehole River',
+    description: 'The walk starts through the forest near the river before opening toward the thermal basin.',
+    credit: 'NPS/Diane Renkin',
+  },
+  {
+    image: require('../../assets/trails/grand-prismatic/midway.jpg'),
+    title: 'Move through Midway Geyser Basin',
+    description: 'Boardwalks and steam frame the changing colors and scale of the basin.',
+    credit: 'NPS/Neal Herbert',
+  },
+  {
+    image: require('../../assets/trails/grand-prismatic/grand-prismatic-spring.jpg'),
+    title: 'See Grand Prismatic open up',
+    description: 'The overlook reveals the spring’s blue center and the bands of color around it.',
+    credit: 'NPS/Jim Peaco',
+  },
+  {
+    image: require('../../assets/trails/grand-prismatic/excelsior.jpg'),
+    title: 'Look back across the basin',
+    description: 'From above, the trail becomes part of a much larger thermal landscape.',
+    credit: 'NPS/Jim Peaco',
+  },
+] as const;
+
 export default function TrailPreviewScreen() {
   const { slug } = useLocalSearchParams<{ slug?: string }>();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const photoTourScrollRef = useRef<ScrollViewInstance>(null);
   const suggestion = getTrailNoticingSuggestion(slug);
   const [trail, setTrail] = useState<Trail | null>(null);
   const [customNotice, setCustomNotice] = useState(() => suggestion?.focus ?? '');
   const [noticeSaved, setNoticeSaved] = useState(false);
   const [saved, setSaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [photoTourOpen, setPhotoTourOpen] = useState(false);
+  const [photoTourIndex, setPhotoTourIndex] = useState(0);
   const nodConnected = isNodConnected();
   const suggestionStatus = !customNotice.trim() ? 'Optional' : customNotice.trim() === suggestion?.focus ? 'For this trail' : 'Your detail';
 
@@ -62,6 +94,25 @@ export default function TrailPreviewScreen() {
     pathname: '/hike',
     params: { slug: trail?.slug ?? slug ?? 'grand-prismatic-overlook', notice: customNotice.trim() },
   });
+
+  const openPhotoTour = () => {
+    setPhotoTourIndex(0);
+    setPhotoTourOpen(true);
+  };
+
+  useEffect(() => {
+    if (!photoTourOpen) return;
+    const timer = setTimeout(() => {
+      const nextIndex = (photoTourIndex + 1) % photoTourSlides.length;
+      setPhotoTourIndex(nextIndex);
+      photoTourScrollRef.current?.scrollTo({ x: screenWidth * nextIndex, animated: true });
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [photoTourIndex, photoTourOpen, screenWidth]);
+
+  useEffect(() => {
+    if (photoTourOpen) photoTourScrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [photoTourOpen]);
 
   return (
     <View style={styles.page}>
@@ -152,12 +203,12 @@ export default function TrailPreviewScreen() {
               <Image source={nodAsset} contentFit="contain" style={styles.nodTileImage} />
               <Text style={styles.nodTileLabel}>{nodConnected ? 'Nod ready' : 'Phone marking'}</Text>
             </View>
-            <View style={styles.mediaTile}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Open photo tour" onPress={openPhotoTour} style={({ pressed }) => [styles.mediaTile, pressed && styles.pressed]}>
               <Image source={trailImagesPhoto} contentFit="cover" style={styles.mediaImage} />
               <View style={styles.mediaShade} />
               <View style={styles.mediaPlay}><TrailSymbol name="play.fill" androidName="play_arrow" size={15} color="#FFFFFF" /></View>
               <Text style={styles.mediaLabel}>Photo tour</Text>
-            </View>
+            </Pressable>
           </View>
 
           <View style={styles.briefing}>
@@ -229,6 +280,48 @@ export default function TrailPreviewScreen() {
           <Text style={styles.startArrow}>→</Text>
         </Pressable>
       </SafeAreaView>
+
+      <Modal visible={photoTourOpen} animationType="fade" presentationStyle="fullScreen" onRequestClose={() => setPhotoTourOpen(false)}>
+        <View style={styles.photoTourScreen}>
+          <StatusBar style="light" />
+          <ScrollView
+            ref={photoTourScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            bounces={false}
+            onMomentumScrollEnd={(event) => setPhotoTourIndex(Math.round(event.nativeEvent.contentOffset.x / screenWidth))}
+          >
+            {photoTourSlides.map((slide, index) => (
+              <View key={slide.title} style={[styles.photoTourPage, { width: screenWidth, height: screenHeight }]}>
+                <Image source={slide.image} contentFit="cover" style={StyleSheet.absoluteFill} />
+                <View style={styles.photoTourShade} />
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['transparent', 'rgba(5, 18, 11, 0.06)', 'rgba(5, 18, 11, 0.42)', 'rgba(5, 18, 11, 0.82)']}
+                  locations={[0, 0.36, 0.72, 1]}
+                  style={styles.photoTourBottomFade}
+                />
+                <SafeAreaView style={styles.photoTourOverlay} edges={['top', 'bottom']}>
+                  <View style={styles.photoTourTopBar}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Close photo tour" onPress={() => setPhotoTourOpen(false)} style={styles.photoTourClose}>
+                      <TrailSymbol name="xmark" androidName="close" size={18} color="#FFFFFF" />
+                    </Pressable>
+                    <View style={styles.photoTourBadge}><Text style={styles.photoTourBadgeText}>{trailName}</Text></View>
+                    <View style={styles.photoTourCount}><Text style={styles.photoTourCountText}>{index + 1} / {photoTourSlides.length}</Text></View>
+                  </View>
+                  <View style={styles.photoTourBottom}>
+                    <View style={styles.photoTourDots}>{photoTourSlides.map((item, dotIndex) => <View key={item.title} style={[styles.photoTourDot, dotIndex === photoTourIndex && styles.photoTourDotActive]} />)}</View>
+                    <Text style={styles.photoTourTitle}>{slide.title}</Text>
+                    <Text style={styles.photoTourDescription}>{slide.description}</Text>
+                    <Text style={styles.photoTourCredit}>{slide.credit} · Yellowstone National Park</Text>
+                  </View>
+                </SafeAreaView>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -287,6 +380,24 @@ const styles = StyleSheet.create({
   mediaShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(12, 25, 17, 0.24)' },
   mediaPlay: { position: 'absolute', left: '50%', top: '50%', width: 38, height: 38, marginLeft: -19, marginTop: -19, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(26, 50, 37, 0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)' },
   mediaLabel: { position: 'absolute', left: 12, bottom: 10, color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  photoTourScreen: { flex: 1, backgroundColor: '#101714' },
+  photoTourPage: { position: 'relative', backgroundColor: '#101714' },
+  photoTourShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(5, 18, 11, 0.22)' },
+  photoTourBottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 340 },
+  photoTourOverlay: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 24 },
+  photoTourTopBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingTop: 8 },
+  photoTourClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(20, 45, 33, 0.76)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
+  photoTourBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(245,247,243,0.9)' },
+  photoTourBadgeText: { color: '#193323', fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+  photoTourCount: { minWidth: 44, alignItems: 'flex-end' },
+  photoTourCountText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  photoTourBottom: { paddingTop: 22, paddingBottom: 4 },
+  photoTourDots: { flexDirection: 'row', gap: 6, marginBottom: 14 },
+  photoTourDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.46)' },
+  photoTourDotActive: { width: 22, backgroundColor: '#FFFFFF' },
+  photoTourTitle: { color: '#FFFFFF', fontSize: 30, lineHeight: 35, fontWeight: '800', letterSpacing: -0.6 },
+  photoTourDescription: { maxWidth: 350, color: '#E0ECE3', fontSize: 16, lineHeight: 23, marginTop: 8 },
+  photoTourCredit: { color: '#C1D4C6', fontSize: 11, lineHeight: 16, marginTop: 13 },
   statColumn: { flex: 1, gap: 8 },
   statCard: { flex: 1, minHeight: 76, justifyContent: 'space-between', borderRadius: 18, padding: 12, backgroundColor: '#F0F4EF' },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },

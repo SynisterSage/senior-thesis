@@ -1,6 +1,6 @@
 import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +14,7 @@ import { getPublishedTrail } from '@/lib/trails';
 import { getNoticingPrompt, grandPrismaticMoments } from '@/lib/trail-moments';
 import { clearActiveHikeDraft, getActiveHikeDraft, saveActiveHikeDraft, type CapturedTrailMoment } from '@/lib/trail-stories';
 import { isNodConnected } from '@/lib/onboarding';
+import { getLiveMapStyle, type LiveMapStyle } from '@/lib/trailmark-preferences';
 
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 const fallbackMarkCoordinate: Position = [-110.836, 44.520];
@@ -170,6 +171,7 @@ export default function HikeScreen() {
   const markSequenceRef = useRef(matchingDraft?.marks.length ?? 0);
   const [routeShape, setRouteShape] = useState<Feature<LineString> | null>(null);
   const [routeDrawProgress, setRouteDrawProgress] = useState(0);
+  const [liveMapStyle, setLiveMapStyle] = useState<LiveMapStyle>(getLiveMapStyle());
   const [zoomLevel, setZoomLevel] = useState(14.5);
   const [trailName, setTrailName] = useState('Grand Prismatic Overlook');
   const [noticingFocus] = useState(() => matchingDraft?.noticingFocus ?? notice?.trim() ?? '');
@@ -204,6 +206,9 @@ export default function HikeScreen() {
   const [guidanceOpacity] = useState(() => new Animated.Value(1));
   const [guidanceOffset] = useState(() => new Animated.Value(0));
   const guidanceDismissed = useRef(false);
+  useFocusEffect(useCallback(() => {
+    setLiveMapStyle(getLiveMapStyle());
+  }, []));
   useEffect(() => () => {
     if (storyCameraTimer.current) clearTimeout(storyCameraTimer.current);
     if (arrivalCameraTimer.current) clearTimeout(arrivalCameraTimer.current);
@@ -530,7 +535,7 @@ export default function HikeScreen() {
       <StatusBar style="dark" />
       <Mapbox.MapView
         style={styles.map}
-        styleURL={storyIntro || storyProgressIndex !== null ? Mapbox.StyleURL.Outdoors : Mapbox.StyleURL.Light}
+        styleURL={storyIntro || storyProgressIndex !== null || liveMapStyle === 'terrain' ? Mapbox.StyleURL.Outdoors : Mapbox.StyleURL.Light}
         onDidFinishLoadingStyle={() => setStoryStyleLoaded(true)}
         scaleBarEnabled={false}
         compassEnabled={false}
@@ -601,6 +606,9 @@ export default function HikeScreen() {
         {!storyIntro && storyIndex === null && <View style={styles.mapControls}>
           <Pressable accessibilityRole="button" accessibilityLabel="Leave hike" onPress={confirmLeaveHike} style={({ pressed }) => [styles.mapControl, styles.leaveControl, pressed && styles.pressed]}>
             <TrailSymbol name="xmark" androidName="close" size={18} color="#FFFFFF" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
+            <TrailSymbol name="gearshape" androidName="settings" size={18} color="#FFFFFF" />
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Recenter route" onPress={centerRoute} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
             <TrailSymbol name="scope" androidName="center_focus_strong" size={18} color="#FFFFFF" />

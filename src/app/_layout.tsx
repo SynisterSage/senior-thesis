@@ -15,6 +15,7 @@ export default function RootLayout() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="pair-nod" options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="trail-preview" options={{ headerShown: false }} />
       <Stack.Screen name="trail-stories" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="hike" options={{ headerShown: false }} />
