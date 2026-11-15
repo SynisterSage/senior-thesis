@@ -204,7 +204,7 @@ export default function TrailPreviewScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={nodConnected ? 'Manage Nod in Settings' : 'Open Nod settings'}
-              onPress={() => router.push('/settings')}
+              onPress={() => router.push(nodConnected ? { pathname: '/settings', params: { open: 'nod' } } : '/pair-nod')}
               style={({ pressed }) => [styles.mediaTile, styles.nodTile, pressed && styles.pressed]}
             >
               <Image source={nodAsset} contentFit="contain" style={styles.nodTileImage} />

@@ -1,9 +1,9 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '@/constants/trailmark-theme';
@@ -18,7 +18,10 @@ const legalLinks = {
 } as const;
 
 export default function SettingsScreen() {
+  const { open } = useLocalSearchParams<{ open?: string }>();
   const [nodConnected, setNodConnected] = useState(isNodConnected());
+  const [nodManageOpen, setNodManageOpen] = useState(() => open === 'nod');
+  const [nodTested, setNodTested] = useState(false);
   const [liveMapStyle, setLiveMapStyleState] = useState<LiveMapStyle>(getLiveMapStyle());
   const [replayPace, setReplayPaceState] = useState<ReplayPace>(getReplayPace());
   const [includeWords, setIncludeWordsState] = useState(getIncludeWords());
@@ -39,8 +42,12 @@ export default function SettingsScreen() {
       <Text accessibilityRole="header" style={styles.title}>Settings</Text>
 
       <Section label="MARKING">
-        <SettingsRow icon="dot.radiowaves.left.and.right" androidIcon="bluetooth" title="Nod" detail={nodConnected ? 'Connected and ready' : 'Not connected'} action={nodConnected ? 'Manage' : 'Set up'} onPress={() => router.push('/pair-nod')} />
-        <SettingsRow icon="iphone" androidIcon="phone_iphone" title="Phone marking" detail="Always available on this device" />
+        <SettingsRow icon="dot.radiowaves.left.and.right" androidIcon="bluetooth" title="Nod" detail={nodConnected ? 'Connected and ready' : 'Not connected'} action={nodConnected ? 'Manage' : 'Set up'} onPress={() => nodConnected ? setNodManageOpen(true) : router.push({ pathname: '/pair-nod', params: { returnTo: 'settings' } })} />
+      </Section>
+
+      <Section label="HIKE AND LOCATION">
+        <SettingsRow icon="location.fill" androidIcon="location_on" title="Location access" detail="Used to place moments along your walk" action="Manage" onPress={() => void Linking.openSettings()} />
+        <SettingsRow icon="lock.open" androidIcon="lock_open" title="Active hike tracking" detail="Keeps an active hike ready while your phone is locked" action="On" />
       </Section>
 
       <Section label="DEFAULTS">
@@ -51,6 +58,12 @@ export default function SettingsScreen() {
 
       <Section label="YOUR STORIES">
         <SettingsRow icon="square.stack" androidIcon="collections_bookmark" title="Archive" detail="Saved walks stay on this device" action="Open" onPress={() => router.replace('/(tabs)/archive')} />
+        <SettingsRow icon="internaldrive" androidIcon="storage" title="Story storage" detail="Stories are saved locally on this device" />
+      </Section>
+
+      <Section label="HELP">
+        <SettingsRow icon="hand.tap" androidIcon="touch_app" title="How Nod works" detail="Press once when something catches your attention" action="Read" onPress={() => setNodManageOpen(true)} />
+        <SettingsRow icon="questionmark.circle" androidIcon="help_outline" title="Troubleshooting" detail="Connection and marking help" action="Read" />
       </Section>
 
       <Section label="LEGAL">
@@ -59,10 +72,39 @@ export default function SettingsScreen() {
       </Section>
 
       <Section label="TRAILMARK">
-        <SettingsRow icon="info.circle" androidIcon="info" title="About TrailMark" detail="Prototype · November 2026" />
+        <SettingsRow icon="info.circle" androidIcon="info" title="About TrailMark" detail="Version 1.0.0" />
       </Section>
     </ScrollView>
+    <NodManagementSheet visible={nodManageOpen} connected={nodConnected} tested={nodTested} onTest={() => setNodTested(true)} onClose={() => setNodManageOpen(false)} />
   </SafeAreaView>;
+}
+
+function NodManagementSheet({ visible, connected, tested, onTest, onClose }: { visible: boolean; connected: boolean; tested: boolean; onTest: () => void; onClose: () => void }) {
+  const [sheetProgress] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    if (!visible) return;
+    sheetProgress.setValue(0);
+    const animation = Animated.timing(sheetProgress, { toValue: 1, duration: 280, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
+  }, [sheetProgress, visible]);
+
+  return <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <View style={styles.sheetOverlay}>
+      <Animated.View pointerEvents="none" style={[styles.sheetBackdrop, { opacity: sheetProgress }]} />
+      <Pressable accessibilityLabel="Close Nod management" onPress={onClose} style={styles.sheetDismiss} />
+      <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetProgress.interpolate({ inputRange: [0, 1], outputRange: [360, 0] }) }] }]}>
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetHeader}><View style={styles.sheetIcon}><SymbolView name={{ ios: 'dot.radiowaves.left.and.right' as never, android: 'bluetooth' as never, web: 'bluetooth' as never }} size={18} weight="medium" tintColor={palette.accent} /></View><View style={styles.sheetCopy}><Text style={styles.sheetTitle}>Manage Nod</Text><Text style={styles.sheetDetail}>{connected ? 'Connected and ready for your next walk.' : 'Nod is not connected.'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Nod management" onPress={onClose} style={styles.sheetClose}><Text style={styles.sheetCloseText}>×</Text></Pressable></View>
+        {connected ? <>
+          <View style={styles.deviceStatus}><View><Text style={styles.deviceStatusLabel}>Nod status</Text><Text style={styles.deviceStatusValue}>Connected · 87% battery</Text></View><Text style={styles.deviceStatusMeta}>Synced just now</Text></View>
+          <Pressable accessibilityRole="button" onPress={onTest} style={({ pressed }) => [styles.sheetPrimary, pressed && styles.pressed]}><Text style={styles.sheetPrimaryText}>{tested ? 'That came through.' : 'Test Nod'}</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/pair-nod', params: { returnTo: 'settings' } }); }} style={({ pressed }) => [styles.sheetSecondary, pressed && styles.pressed]}><Text style={styles.sheetSecondaryText}>Reconnect Nod</Text></Pressable>
+        </> : <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/pair-nod', params: { returnTo: 'settings' } }); }} style={({ pressed }) => [styles.sheetPrimary, pressed && styles.pressed]}><Text style={styles.sheetPrimaryText}>Set up Nod</Text></Pressable>}
+      </Animated.View>
+    </View>
+  </Modal>;
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -107,4 +149,25 @@ const styles = StyleSheet.create({
   choiceText: { color: palette.secondary, fontSize: 11, fontWeight: '800' },
   choiceTextSelected: { color: '#FFFFFF' },
   pressed: { opacity: 0.7 },
+  sheetOverlay: { flex: 1, justifyContent: 'flex-end' },
+  sheetBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(12, 25, 17, 0.24)' },
+  sheetDismiss: { ...StyleSheet.absoluteFill },
+  sheet: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 28, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#F5F7F3' },
+  sheetHandle: { width: 38, height: 4, alignSelf: 'center', marginBottom: 18, borderRadius: 2, backgroundColor: '#C5D0C8' },
+  sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  sheetIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#E7F0E8' },
+  sheetCopy: { flex: 1, gap: 3 },
+  sheetTitle: { color: palette.text, fontSize: 21, fontWeight: '800', letterSpacing: -0.3 },
+  sheetDetail: { color: palette.secondary, fontSize: 14, lineHeight: 20 },
+  sheetClose: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#E7F0E8' },
+  sheetCloseText: { color: palette.text, fontSize: 25, lineHeight: 26, fontWeight: '400' },
+  deviceStatus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 22, padding: 14, borderRadius: 16, backgroundColor: '#E7F0E8' },
+  deviceStatusLabel: { color: palette.secondary, fontSize: 12, fontWeight: '700' },
+  deviceStatusValue: { color: palette.text, fontSize: 15, fontWeight: '800', marginTop: 3 },
+  deviceStatusMeta: { color: palette.accent, fontSize: 11, fontWeight: '800' },
+  sheetPrimary: { minHeight: 54, alignItems: 'center', justifyContent: 'center', marginTop: 13, borderRadius: 17, backgroundColor: palette.accent },
+  sheetPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  sheetNote: { color: palette.secondary, fontSize: 14, lineHeight: 20, marginTop: 14 },
+  sheetSecondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  sheetSecondaryText: { color: palette.secondary, fontSize: 15, fontWeight: '700' },
 });

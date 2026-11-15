@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,6 +13,7 @@ const nodAsset = require('../../assets/images/transparent-nod.png');
 type PairingState = 'ready' | 'listening' | 'connected';
 
 export default function PairNodScreen() {
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [pairingState, setPairingState] = useState<PairingState>('ready');
 
   const beginPairing = () => {
@@ -25,7 +26,7 @@ export default function PairNodScreen() {
     setPairingState('connected');
   };
 
-  const finish = () => router.replace('/(tabs)/trails');
+  const finish = () => router.replace(returnTo === 'settings' ? { pathname: '/settings', params: { open: 'nod' } } : '/(tabs)/trails');
 
   return <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
     <StatusBar style="dark" />

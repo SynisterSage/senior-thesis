@@ -338,6 +338,18 @@ export default function HikeScreen() {
     setMarkedMoments(nextMoments);
     persistDraft(nextMoments, storyNotes);
     setLatestMarkId(moment.id);
+    if (source === 'nod') {
+      setZoomLevel(15.15);
+      cameraRef.current?.setCamera({
+        centerCoordinate: coordinate,
+        zoomLevel: 15.15,
+        pitch: 28,
+        heading: 18 + nextIndex * 8,
+        padding: storyCameraPadding,
+        animationDuration: 950,
+        animationMode: 'flyTo',
+      });
+    }
     markBloomScale.setValue(0.8);
     markBloomOpacity.setValue(0.62);
     Animated.parallel([
@@ -671,7 +683,7 @@ export default function HikeScreen() {
               <Pressable accessibilityRole="button" accessibilityLabel="Close Nod status" onPress={closeNodSheet} style={styles.anchorClose}><TrailSymbol name="xmark" androidName="close" size={16} color="#193323" /></Pressable>
             </View>
             <View style={styles.nodSheetCount}><Text style={styles.nodSheetCountValue}>{markedCount}</Text><Text style={styles.nodSheetCountLabel}>{markedCount === 1 ? 'moment kept on this walk' : 'moments kept on this walk'}</Text></View>
-            <Pressable accessibilityRole="button" onPress={() => { closeNodSheet(); router.push(nodConnected ? '/settings' : '/pair-nod'); }} style={({ pressed }) => [styles.nodSheetAction, pressed && styles.pressed]}><Text style={styles.nodSheetActionText}>{nodConnected ? 'Manage Nod' : 'Set up Nod'}</Text><TrailSymbol name="arrow.up.right" androidName="north_east" size={16} color="#FFFFFF" /></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => { closeNodSheet(); router.push(nodConnected ? { pathname: '/settings', params: { open: 'nod' } } : '/pair-nod'); }} style={({ pressed }) => [styles.nodSheetAction, pressed && styles.pressed]}><Text style={styles.nodSheetActionText}>{nodConnected ? 'Manage Nod' : 'Set up Nod'}</Text><TrailSymbol name="arrow.up.right" androidName="north_east" size={16} color="#FFFFFF" /></Pressable>
             <Pressable accessibilityRole="button" onPress={closeNodSheet} style={({ pressed }) => [styles.nodSheetSecondary, pressed && styles.pressed]}><Text style={styles.nodSheetSecondaryText}>Back to the walk</Text></Pressable>
           </Animated.View>
         </> : null}
@@ -703,7 +715,6 @@ export default function HikeScreen() {
               <Text style={styles.finishText}>Finish</Text>
             </Pressable>
           </Animated.View>
-          {nodConnected && !demoComplete ? <Pressable accessibilityRole="button" accessibilityLabel="Use phone instead to mark a moment" onPress={() => markMoment('phone')} style={({ pressed }) => [styles.phoneFallback, pressed && styles.pressed]}><Text style={styles.phoneFallbackText}>Use phone instead</Text></Pressable> : null}
           <View pointerEvents="none" style={[styles.attribution, styles.attributionLight]}><Text style={[styles.attributionText, styles.attributionTextLight]}>© Mapbox · © OpenStreetMap</Text></View>
         </View> : null}
         {storyIndex !== null && storySheetOpen ? <View pointerEvents="none" style={styles.storyScrim} /> : null}
@@ -947,8 +958,6 @@ const styles = StyleSheet.create({
   statusText: { color: '#B9D2C0', fontSize: 12, lineHeight: 17 },
   actions: { flexDirection: 'row', gap: 10 },
   markButton: { flex: 1, minHeight: 56, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#A8DFB6' },
-  phoneFallback: { alignSelf: 'center', minHeight: 34, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
-  phoneFallbackText: { color: '#D7E5DB', fontSize: 13, fontWeight: '700' },
   markButtonComplete: { backgroundColor: '#DDE9E1', borderColor: '#DDE9E1' },
   markText: { color: '#193323', fontSize: 16, fontWeight: '800' },
   finishButton: { minWidth: 94, minHeight: 56, paddingHorizontal: 18, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EB7657' },
