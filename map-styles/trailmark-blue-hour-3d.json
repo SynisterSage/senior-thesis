@@ -1,0 +1,28 @@
+{
+  "version": 8,
+  "name": "TrailMark — Blue dream 3D",
+  "imports": [
+    {
+      "id": "basemap",
+      "url": "mapbox://styles/mapbox/standard",
+      "config": {
+        "theme": "default",
+        "lightPreset": "day",
+        "font": "Manrope",
+        "showPointOfInterestLabels": false,
+        "showRoadLabels": false,
+        "showTransitLabels": false,
+        "show3dObjects": true,
+        "showPedestrianRoads": true,
+        "colorBase": "#E5F4FC",
+        "colorLand": "#D2EBF8",
+        "colorWater": "#35B8E8",
+        "colorGreenspace": "#B9DFF1",
+        "colorBuildings": "#81B9D8",
+        "colorPlaceLabels": "#245A7A"
+      }
+    }
+  ],
+  "sources": {},
+  "layers": []
+}

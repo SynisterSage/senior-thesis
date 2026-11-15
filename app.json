@@ -45,7 +45,8 @@
         {
           "locationWhenInUsePermission": "TrailMark uses your location to place moments along your hike."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

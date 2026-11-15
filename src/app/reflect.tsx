@@ -10,7 +10,7 @@ import { getNoticingPrompt, grandPrismaticMoments } from '@/lib/trail-moments';
 const palette = colors.light;
 
 export default function ReflectScreen() {
-  const { markedCount, momentIds: momentIdsParam, coordinates: coordinatesParam, focus } = useLocalSearchParams<{ markedCount?: string; momentIds?: string; coordinates?: string; focus?: string }>();
+  const { markedCount, momentIds: momentIdsParam, coordinates: coordinatesParam, focus, noticeTheme } = useLocalSearchParams<{ markedCount?: string; momentIds?: string; coordinates?: string; focus?: string; noticeTheme?: string }>();
   const cameraRef = useRef<Mapbox.Camera>(null);
   const coordinates = useMemo<number[][]>(() => {
     try { const parsed = JSON.parse(coordinatesParam ?? '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
@@ -71,7 +71,7 @@ export default function ReflectScreen() {
         <View style={styles.completeMark}><Text style={styles.completeCheck}>✓</Text></View>
         <Text accessibilityRole="header" style={styles.completeTitle}>{total ? 'That is the walk, for now.' : 'This walk is still worth keeping.'}</Text>
         <Text style={styles.completeText}>{total ? 'Your memories are ready to become a trail story.' : 'Return to the trail when something feels worth holding onto.'}</Text>
-        <ActionButton label="Build my trail story" onPress={() => router.replace({ pathname: '/recap', params: { markedCount: String(total), notes: JSON.stringify(notes), momentIds: JSON.stringify(momentIds), focus: noticingFocus } })} />
+        <ActionButton label="Build my trail story" onPress={() => router.replace({ pathname: '/recap', params: { markedCount: String(total), notes: JSON.stringify(notes), momentIds: JSON.stringify(momentIds), focus: noticingFocus, noticeTheme } })} />
       </ReflectShell>
     );
   }
@@ -89,7 +89,7 @@ export default function ReflectScreen() {
         <>
           <Text accessibilityRole="header" style={styles.title}>What do you remember?</Text>
           <Text style={styles.description}>Before TrailMark shows you where this happened, leave yourself a small note about what stayed with you.</Text>
-          {noticingFocus ? <View style={styles.focusPill}><Text style={styles.focusLabel}>Your noticing lens</Text><Text style={styles.focusText}>{noticingFocus}</Text></View> : null}
+          {noticingFocus ? <View style={styles.focusPill}><Text style={styles.focusLabel}>Your trail detail</Text><Text style={styles.focusText}>{noticingFocus}</Text></View> : null}
           <View style={styles.promptCard}>
             <View style={styles.promptDot} />
           <Text style={styles.prompt}>{getNoticingPrompt(currentMoment, noticingFocus)}</Text>
@@ -102,7 +102,7 @@ export default function ReflectScreen() {
               textAlignVertical="top"
               value={note}
               onChangeText={setNote}
-              placeholder="A sound, a view, a feeling, something small..."
+              placeholder="A color, a view, a feeling, something small..."
               placeholderTextColor="#75857C"
               style={styles.input}
             />

@@ -1,4 +1,6 @@
 import Mapbox from '@rnmapbox/maps';
+import { requestPermissionsAsync, saveToLibraryAsync } from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -7,9 +9,11 @@ import { AccessibilityInfo, Animated, KeyboardAvoidingView, Modal, Platform, Pre
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import type { Feature, FeatureCollection, LineString, Point, Position } from 'geojson';
+import { captureRef } from 'react-native-view-shot';
 import { grandPrismaticMoments, type PreparedTrailMoment } from '@/lib/trail-moments';
-import { clearActiveHikeDraft, getSavedTrailStory, saveTrailStory, type CapturedTrailMoment } from '@/lib/trail-stories';
+import { clearActiveHikeDraft, getSavedTrailStory, saveTrailStory, updateTrailStory, type CapturedTrailMoment } from '@/lib/trail-stories';
 import { getPublishedTrail } from '@/lib/trails';
+import { getNoticingThemeId, noticingThemes } from '@/constants/trailmark-theme';
 
 const center: Position = [-110.836, 44.520];
 const token = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -17,12 +21,13 @@ if (token) Mapbox.setAccessToken(token);
 type Moment = { note: string; moment?: PreparedTrailMoment; captured?: CapturedTrailMoment };
 type MomentAddition = { image?: number; thought?: string };
 type Route = Feature<LineString>;
-type StoryMapStyle = 'terrain' | 'classic' | 'dark' | 'unicorn' | 'lichen' | 'night-trail' | 'sunset';
+type StoryMapStyle = 'terrain' | 'classic' | 'dark' | 'unicorn' | 'blue-dream' | 'lichen' | 'night-trail' | 'sunset';
 const storyMapStyles: Record<StoryMapStyle, string> = {
   terrain: Mapbox.StyleURL.Outdoors,
   classic: Mapbox.StyleURL.Light,
   dark: Mapbox.StyleURL.Dark,
   unicorn: 'mapbox://styles/lex-ferguson/cmwhge46101qh01s6gh6ugbdx',
+  'blue-dream': 'mapbox://styles/lex-ferguson/cmwi2loq901qo01s6fmxkazc4',
   lichen: 'mapbox://styles/lex-ferguson/cmwhgb67601qf01s6540t7u4k',
   'night-trail': 'mapbox://styles/lex-ferguson/cmwhgaodc01qe01s61qzp0ulp',
   sunset: 'mapbox://styles/lex-ferguson/cmwhg8tl201oz01s4gdhz9o1q',
@@ -33,13 +38,32 @@ const mapMoodOptions: { id: StoryMapStyle; label: string; colors: [string, strin
   { id: 'classic', label: 'Classic', colors: ['#E9E6D9', '#B8CED2'] },
   { id: 'dark', label: 'Dark', colors: ['#1D2C31', '#526971'] },
   { id: 'unicorn', label: 'Unicorn', colors: ['#E2D6FA', '#9BCFE0'] },
+  { id: 'blue-dream', label: 'Blue dream', colors: ['#D2EBF8', '#35B8E8'] },
   { id: 'lichen', label: 'Lichen 3D', colors: ['#B5C6A7', '#6A9081'] },
   { id: 'night-trail', label: 'Night trail', colors: ['#182A31', '#35505A'] },
   { id: 'sunset', label: 'Sunset', colors: ['#E6B880', '#BD7964'] },
 ];
+type StoryMapPalette = {
+  trail: string;
+  progress: string;
+  edgeFill: string;
+  edgeText: string;
+  edgeStroke: string;
+};
+const storyMapPalettes: Record<StoryMapStyle, StoryMapPalette> = {
+  terrain: { trail: '#2F7D59', progress: '#9AD5A8', edgeFill: '#F4F8EF', edgeText: '#2F7D59', edgeStroke: '#2F7D59' },
+  classic: { trail: '#226C4A', progress: '#A8E5B5', edgeFill: '#FFFFFF', edgeText: '#226C4A', edgeStroke: '#226C4A' },
+  dark: { trail: '#D4B653', progress: '#FFF0A8', edgeFill: '#24352F', edgeText: '#F5D477', edgeStroke: '#F5D477' },
+  unicorn: { trail: '#167EAE', progress: '#7AD8F2', edgeFill: '#E8F8FF', edgeText: '#167EAE', edgeStroke: '#167EAE' },
+  'blue-dream': { trail: '#167EAE', progress: '#7AD8F2', edgeFill: '#E8F8FF', edgeText: '#167EAE', edgeStroke: '#167EAE' },
+  lichen: { trail: '#567A62', progress: '#A8CF9A', edgeFill: '#EEF4E7', edgeText: '#567A62', edgeStroke: '#567A62' },
+  'night-trail': { trail: '#67C7C4', progress: '#B6F0E2', edgeFill: '#213B40', edgeText: '#8FE8DD', edgeStroke: '#8FE8DD' },
+  sunset: { trail: '#B75F4F', progress: '#F6C08A', edgeFill: '#FFF0DC', edgeText: '#B75F4F', edgeStroke: '#B75F4F' },
+};
+const noticingLenses = Object.values(noticingThemes);
 
 export default function RecapScreen() {
-  const params = useLocalSearchParams<{ markedCount?: string; notes?: string; momentIds?: string; marks?: string; routeCoordinates?: string; storyId?: string; focus?: string }>();
+  const params = useLocalSearchParams<{ markedCount?: string; notes?: string; momentIds?: string; marks?: string; routeCoordinates?: string; storyId?: string; focus?: string; noticeTheme?: string }>();
   const saved = useMemo(() => params.storyId ? getSavedTrailStory(params.storyId) : undefined, [params.storyId]);
   const notes = useMemo(() => saved?.notes ?? parse<string>(params.notes), [saved, params.notes]);
   const ids = useMemo(() => saved?.momentIds ?? parse<string>(params.momentIds), [saved, params.momentIds]);
@@ -51,6 +75,10 @@ export default function RecapScreen() {
   const [route, setRoute] = useState<Route | null>(() => shape(coordinates));
   const [composer, setComposer] = useState(false);
   const [title, setTitle] = useState(saved?.title ?? 'Grand Prismatic Overlook');
+  const [noticeTheme, setNoticeTheme] = useState(saved?.noticeTheme ?? (params.noticeTheme as keyof typeof noticingThemes | undefined) ?? getNoticingThemeId(noticingFocus));
+  const activeNoticeTheme = noticingThemes[noticeTheme as keyof typeof noticingThemes] ?? noticingThemes.living;
+  const [mapMood, setMapMood] = useState<StoryMapStyle>((saved?.mapMood as StoryMapStyle) ?? (noticeTheme === 'water' ? 'blue-dream' : noticeTheme === 'earth' ? 'sunset' : 'terrain'));
+  const [savedStoryThread, setSavedStoryThread] = useState(saved?.storyThread ?? '');
   const [reducedMotion, setReducedMotion] = useState(true);
   useEffect(() => {
     let active = true;
@@ -63,50 +91,70 @@ export default function RecapScreen() {
     return () => subscription.remove();
   }, []);
   const save = () => {
-    if (!saved) {
-      saveTrailStory({ title: title.trim() || 'Grand Prismatic Overlook', location: 'Yellowstone National Park', momentIds: ids, notes, marks, routeCoordinates: route?.geometry.coordinates ?? coordinates, noticingFocus });
+    const storyUpdate = { title: title.trim() || 'Grand Prismatic Overlook', location: 'Yellowstone National Park', momentIds: ids, notes, marks, routeCoordinates: route?.geometry.coordinates ?? coordinates, noticingFocus, noticeTheme, mapMood, storyThread: savedStoryThread };
+    if (saved) {
+      updateTrailStory(saved.id, storyUpdate);
+    } else {
+      saveTrailStory(storyUpdate);
       clearActiveHikeDraft();
     }
     router.dismissAll();
     router.replace('/(tabs)/archive');
   };
   return <SafeAreaView edges={['top']} style={s.screen}>
-    <View style={s.header}><Text style={s.headerTitle}>Your trail story</Text><Button label="Done" onPress={save} quiet /></View>
+    <View style={s.header}><Text style={s.headerTitle}>Your trail story</Text><Button label="Done" onPress={save} quiet tint={activeNoticeTheme.accent} /></View>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.page}>
       <View style={s.portrait}>
-        <StoryMap route={route} moments={moments} active={-1} mapStyle="classic" reducedMotion={reducedMotion} hero />
-        {noticingFocus ? <View style={s.portraitFocusBadge}><Text style={s.portraitFocusBadgeText}>Noticing {noticingFocus}</Text></View> : null}
-        <View style={s.portraitCaption}><Text style={s.portraitSmall}>Yellowstone National Park</Text><Text accessibilityRole="header" style={s.portraitTitle}>{saved?.title ?? 'Grand Prismatic\nOverlook'}</Text><Text style={s.portraitMeta}>{total} {total === 1 ? 'moment' : 'moments'} you kept</Text></View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Share story" onPress={() => setComposer(true)} style={({ pressed }) => [s.heroStoryButton, pressed && s.pressed]}><TrailSymbol name="square.and.arrow.up" androidName="share" size={15} color="#FFFFFF" /><Text style={s.heroStoryButtonText}>Share story</Text></Pressable>
+        <StoryMap route={route} moments={moments} active={-1} mapStyle={mapMood} reducedMotion={reducedMotion} hero />
+        {noticingFocus ? <View style={[s.portraitFocusBadge, { borderColor: activeNoticeTheme.accent }]}><Text style={[s.portraitFocusBadgeText, { color: activeNoticeTheme.accent }]}>Noticing {noticingFocus}</Text></View> : null}
+        <View style={[s.portraitCaption, { backgroundColor: activeNoticeTheme.surface }]}><Text style={s.portraitSmall}>Yellowstone National Park</Text><Text accessibilityRole="header" style={[s.portraitTitle, { color: activeNoticeTheme.ink }]}>{saved?.title ?? 'Grand Prismatic\nOverlook'}</Text><Text style={[s.portraitMeta, { color: activeNoticeTheme.accent }]}>{total} {total === 1 ? 'moment' : 'moments'} you kept</Text></View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Share story" onPress={() => setComposer(true)} style={({ pressed }) => [s.heroStoryButton, { backgroundColor: activeNoticeTheme.accent }, pressed && s.pressed]}><TrailSymbol name="square.and.arrow.up" androidName="share" size={15} color="#FFFFFF" /><Text style={s.heroStoryButtonText}>Share story</Text></Pressable>
       </View>
       <View style={s.momentIntro}><Text style={s.sectionTitle}>Your moments</Text><Text style={s.secondary}>{noticingFocus ? `Places and words · ${noticingFocus}` : 'Places and words you chose to keep.'}</Text></View>
       {moments.map((item, index) => <View key={`${item.captured?.id ?? index}`} style={s.chapter}>
-        <View style={s.chapterHeading}><View style={s.number}><Text style={s.numberText}>{index + 1}</Text></View><Text style={s.chapterTitle}>{item.moment?.title ?? 'A place you marked'}</Text></View>
+        <View style={s.chapterHeading}><View style={[s.number, { backgroundColor: activeNoticeTheme.accentSoft }]}><Text style={[s.numberText, { color: activeNoticeTheme.accent }]}>{index + 1}</Text></View><Text style={s.chapterTitle}>{item.moment?.title ?? 'A place you marked'}</Text></View>
         {item.moment?.image ? <Image source={item.moment.image} contentFit="cover" style={s.chapterImage} /> : null}
         {item.note.trim() ? <Text style={s.chapterQuote}>{item.note}</Text> : null}
         <Text style={s.context}>{item.moment?.context ?? 'A moment saved along your walk.'}</Text>
       </View>)}
     </ScrollView>
-    <SafeAreaView edges={['bottom']} style={s.dock}><Button label={saved ? 'Back to Archive' : 'Save story'} onPress={save} /></SafeAreaView>
+    <SafeAreaView edges={['bottom']} style={s.dock}><Button label={saved ? 'Save changes' : 'Save story'} onPress={save} tint={activeNoticeTheme.accent} /></SafeAreaView>
     <Modal visible={composer} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setComposer(false)}>
-      <Composer route={route} moments={moments} title={title} focus={noticingFocus} onTitle={setTitle} onClose={() => setComposer(false)} reducedMotion={reducedMotion} />
+      <Composer route={route} moments={moments} title={title} focus={noticingFocus} initialNoticeTheme={noticeTheme} initialMapMood={mapMood} initialStoryThread={savedStoryThread} onTitle={setTitle} onClose={(nextTheme, nextMood, nextThread) => { setNoticeTheme(nextTheme); setMapMood(nextMood); setSavedStoryThread(nextThread); setComposer(false); }} reducedMotion={reducedMotion} />
     </Modal>
   </SafeAreaView>;
 }
 
-function Composer({ route, moments, title, focus, onTitle, onClose, reducedMotion }: { route: Route | null; moments: Moment[]; title: string; focus: string; onTitle: (title: string) => void; onClose: () => void; reducedMotion: boolean }) {
+function Composer({ route, moments, title, focus, initialNoticeTheme, initialMapMood, initialStoryThread, onTitle, onClose, reducedMotion }: { route: Route | null; moments: Moment[]; title: string; focus: string; initialNoticeTheme: string; initialMapMood: StoryMapStyle; initialStoryThread: string; onTitle: (title: string) => void; onClose: (noticeTheme: 'water' | 'living' | 'earth', mapMood: StoryMapStyle, storyThread: string) => void; reducedMotion: boolean }) {
+  const filmRef = useRef<React.ComponentRef<typeof View>>(null);
+  const stickerRef = useRef<React.ComponentRef<typeof View>>(null);
   const [active, setActive] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [mapStyle, setMapStyle] = useState<StoryMapStyle>('terrain');
+  const [mapStyle, setMapStyle] = useState<StoryMapStyle>(initialMapMood);
   const [showNotes, setShowNotes] = useState(true);
   const [speed, setSpeed] = useState(3600);
   const [addTarget, setAddTarget] = useState<number | null>(null);
   const [addMode, setAddMode] = useState<'menu' | 'photo' | 'thought'>('menu');
   const [additions, setAdditions] = useState<Record<number, MomentAddition>>({});
   const [draftThought, setDraftThought] = useState('');
-  const [storyThread, setStoryThread] = useState(() => buildStoryThread(moments, focus, {}));
+  const initialLensIndex = Math.max(0, noticingLenses.findIndex((lens) => lens.id === initialNoticeTheme));
+  const [lensIndex, setLensIndex] = useState(initialLensIndex);
+  const [storyThread, setStoryThread] = useState(() => initialStoryThread || buildStoryThread(moments, focus, {}));
+  const [shareOptionsOpen, setShareOptionsOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [addSheetProgress] = useState(() => new Animated.Value(0));
+  const [themeFade] = useState(() => new Animated.Value(1));
+  const previousLensIndex = useRef(lensIndex);
+  useEffect(() => {
+    if (previousLensIndex.current === lensIndex) return;
+    previousLensIndex.current = lensIndex;
+    if (reducedMotion) return;
+    themeFade.setValue(0.9);
+    const animation = Animated.timing(themeFade, { toValue: 1, duration: 170, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
+  }, [lensIndex, reducedMotion, themeFade]);
   useEffect(() => {
     if (addTarget === null) return;
     addSheetProgress.setValue(0);
@@ -133,46 +181,79 @@ function Composer({ route, moments, title, focus, onTitle, onClose, reducedMotio
   };
   const current = moments[active];
   const currentAddition = active >= 0 ? additions[active] : undefined;
+  const noticeStyle = { backgroundColor: noticingLenses[lensIndex].card };
   const openAdd = () => { setDraftThought(currentAddition?.thought ?? ''); setAddMode('menu'); setAddTarget(active); };
   const closeAdd = () => setAddTarget(null);
   const choosePhoto = (image: number) => { if (addTarget === null) return; setAdditions((existing) => ({ ...existing, [addTarget]: { ...existing[addTarget], image } })); closeAdd(); };
   const saveThought = () => { if (addTarget === null) return; setAdditions((existing) => ({ ...existing, [addTarget]: { ...existing[addTarget], thought: draftThought.trim() } })); closeAdd(); };
   const draftStoryThread = () => setStoryThread(buildStoryThread(moments, focus, additions));
-  const shareStory = () => void Share.share({ title, message: [title, storyThread, focus ? `Noticing ${focus}` : undefined, 'Made with TrailMark.'].filter(Boolean).join('\n\n') });
+  const shareText = () => void Share.share({ title, message: [title, storyThread, focus ? `Noticing ${focus}` : undefined, 'Made with TrailMark.'].filter(Boolean).join('\n\n') });
+  const exportImage = async (kind: 'card' | 'sticker', action: 'share' | 'save') => {
+    const target = kind === 'card' ? filmRef.current : stickerRef.current;
+    if (!target) return;
+    setExporting(true);
+    try {
+      const uri = await captureRef(target, { format: 'png', quality: 1, result: 'tmpfile', ...(kind === 'sticker' ? { width: 1200 } : { width: 1080 }) });
+      if (action === 'share') {
+        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: kind === 'sticker' ? 'Share TrailMark sticker' : 'Share TrailMark story' });
+        else await Share.share({ title, message: 'Made with TrailMark.' });
+      } else {
+        const permission = await requestPermissionsAsync();
+        if (!permission.granted) return;
+        await saveToLibraryAsync(uri);
+      }
+      setShareOptionsOpen(false);
+    } catch (error) {
+      console.warn('Unable to export TrailMark image', error);
+    } finally {
+      setExporting(false);
+    }
+  };
   const storyLength = Math.round((1800 + moments.length * speed) / 1000);
   return <SafeAreaView edges={['top', 'left', 'right']} style={s.screen}>
-    <View style={s.header}><Button label="Close" quiet onPress={onClose} /><Text style={s.headerTitle}>Make it yours</Text><Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Pause replay' : finished ? 'Restart story' : active >= 0 ? 'Resume replay' : 'Play story'} onPress={togglePlayback} style={({ pressed }) => [s.playbackIconButton, pressed && s.pressed]}><TrailSymbol name={playing ? 'pause.fill' : finished ? 'arrow.counterclockwise' : 'play.fill'} androidName={playing ? 'pause' : finished ? 'replay' : 'play_arrow'} size={19} color="#226C4A" /></Pressable></View>
+    <View style={s.header}><Button label="Close" quiet onPress={() => onClose(noticingLenses[lensIndex].id as 'water' | 'living' | 'earth', mapStyle, storyThread)} /><Text style={s.headerTitle}>Make it yours</Text><Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Pause replay' : finished ? 'Restart story' : active >= 0 ? 'Resume replay' : 'Play story'} onPress={togglePlayback} style={({ pressed }) => [s.playbackIconButton, pressed && s.pressed]}><TrailSymbol name={playing ? 'pause.fill' : finished ? 'arrow.counterclockwise' : 'play.fill'} androidName={playing ? 'pause' : finished ? 'replay' : 'play_arrow'} size={19} color="#226C4A" /></Pressable></View>
     <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.composerContent}>
-      <View style={s.film}>
-        
+      <Animated.View ref={filmRef} collapsable={false} style={[s.film, noticeStyle, { opacity: themeFade }]}>
         <StoryMap route={route} moments={moments} active={active} mapStyle={mapStyle} reducedMotion={reducedMotion} hero />
-        <View pointerEvents="none" style={s.filmTop}><Text style={s.filmBrand}>TrailMark</Text><Text style={s.filmMeta}>{active < 0 ? 'Story preview' : `Moment ${active + 1} of ${moments.length}`}</Text>{focus ? <Text style={s.filmFocus}>Noticing {focus}</Text> : null}</View>
-        <View style={s.filmCaption}>
+        <View pointerEvents="none" style={s.filmTop}><Text style={s.filmBrand}>TrailMark</Text><Text style={s.filmMeta}>{active < 0 ? 'A trail story' : `Moment ${active + 1} of ${moments.length}`}</Text><Text style={[s.filmFocus, { color: noticingLenses[lensIndex].accent }]}>{noticingLenses[lensIndex].label}</Text></View>
+        <View style={[s.filmCaption, { backgroundColor: noticingLenses[lensIndex].card, borderTopWidth: 5, borderTopColor: noticingLenses[lensIndex].accent }]}>
           {current ? <View style={s.filmPhotoRow}>
-            {current.moment?.image ? <Image source={current.moment.image} contentFit="cover" style={[s.filmPhoto, s.filmPhotoOverride]} /> : null}
-            {currentAddition?.image ? <Image source={currentAddition.image} contentFit="cover" style={[s.filmPhoto, s.filmPhotoOverride]} /> : null}
-            <Pressable accessibilityRole="button" accessibilityLabel="Add a photo or thought to this moment" onPress={openAdd} style={({ pressed }) => [s.addMomentButton, pressed && s.pressed]}><Text style={s.addMomentText}>＋</Text></Pressable>
+            {current.moment?.image ? <Image source={current.moment.image} contentFit="cover" style={[s.filmPhoto, s.filmPhotoOverride, { borderColor: noticingLenses[lensIndex].accent }]} /> : null}
+            {currentAddition?.image ? <Image source={currentAddition.image} contentFit="cover" style={[s.filmPhoto, s.filmPhotoOverride, { borderColor: noticingLenses[lensIndex].accent }]} /> : null}
+            <Pressable accessibilityRole="button" accessibilityLabel="Add a photo or thought to this moment" onPress={openAdd} style={({ pressed }) => [s.addMomentButton, { backgroundColor: `${noticingLenses[lensIndex].accent}35`, borderColor: noticingLenses[lensIndex].accent }, pressed && s.pressed]}><Text style={s.addMomentText}>＋</Text></Pressable>
           </View> : null}
-          <Text style={s.filmTitle}>{current ? current.moment?.title ?? 'A marked moment' : title}</Text>
+          <Text style={[s.filmTitle, { color: noticingLenses[lensIndex].cardText }]}>{current ? current.moment?.title ?? 'A marked moment' : title}</Text>
           {current ? <Text style={s.filmDescription}>{showNotes && (currentAddition?.thought?.trim() || current.note.trim()) ? `“${currentAddition?.thought?.trim() || current.note.trim()}”` : 'A moment you chose to keep.'}</Text> : <View style={s.filmBadges}><View style={s.filmBadge}><Text style={s.filmBadgeText}>{moments.length} {moments.length === 1 ? 'moment' : 'moments'}</Text></View><View style={s.filmBadge}><Text style={s.filmBadgeText}>Yellowstone</Text></View><View style={s.filmBadge}><Text style={s.filmBadgeText}>{storyLength} sec</Text></View></View>}
         </View>
-      </View>
+      </Animated.View>
       <View style={s.editorSection}>
         <Text style={s.sectionHeading}>Story details</Text>
         <Text style={s.fieldLabel}>Title</Text><TextInput accessibilityLabel="Story title" value={title} onChangeText={onTitle} maxLength={80} style={s.titleInput} placeholder="Name your walk" />
         <View style={s.summaryHeader}><Text style={[s.fieldLabel, s.summaryHeaderLabel]}>Story thread</Text><Pressable accessibilityRole="button" accessibilityLabel="Draft story thread" onPress={draftStoryThread} style={({ pressed }) => [s.summaryAction, pressed && s.pressed]}><TrailSymbol name="sparkles" androidName="auto_awesome" size={18} color="#226C4A" /></Pressable></View>
         <TextInput accessibilityLabel="Editable story thread" multiline textAlignVertical="top" value={storyThread} onChangeText={setStoryThread} style={s.summaryInput} />
         <View style={s.settingGroup}>
+          <View style={s.settingRow}><View><Text style={s.settingTitle}>Story color</Text><Text style={s.settingDetail}>{noticingLenses[lensIndex].detail}</Text></View><View accessibilityRole="radiogroup" style={s.noticeSegments}>{noticingLenses.map((lens, index) => <Pressable key={lens.label} accessibilityRole="radio" accessibilityState={{ selected: lensIndex === index }} onPress={() => { setLensIndex(index); setMapStyle(index === 0 ? 'blue-dream' : index === 2 ? 'sunset' : 'terrain'); }} style={[s.segment, index === lensIndex && { backgroundColor: lens.accent }]}><Text style={[s.segmentText, index === lensIndex && s.segmentTextActive]}>{lens.short}</Text></Pressable>)}</View></View>
+          <View style={s.settingDivider} />
           <View style={s.settingRow}><View><Text style={s.settingTitle}>Replay pace</Text><Text style={s.settingDetail}>How your moments unfold</Text></View><View style={s.segmented}><Pressable accessibilityRole="button" accessibilityState={{ selected: speed === 3600 }} onPress={() => setSpeed(3600)} style={[s.segment, speed === 3600 && s.segmentActive]}><Text style={[s.segmentText, speed === 3600 && s.segmentTextActive]}>Gentle</Text></Pressable><Pressable accessibilityRole="button" accessibilityState={{ selected: speed === 2400 }} onPress={() => setSpeed(2400)} style={[s.segment, speed === 2400 && s.segmentActive]}><Text style={[s.segmentText, speed === 2400 && s.segmentTextActive]}>Quick</Text></Pressable></View></View>
           <View style={s.settingDivider} />
           <View style={s.settingRow}><View><Text style={s.settingTitle}>Include my words</Text><Text style={s.settingDetail}>Show your reflections in the replay</Text></View><Switch accessibilityLabel="Include my reflection notes" value={showNotes} onValueChange={setShowNotes} trackColor={{ true: '#226C4A' }} /></View>
         </View>
       </View>
-      <View style={s.mapMoodSection}><Text style={s.sectionHeading}>Map mood</Text><Text style={s.secondary}>Choose the atmosphere for your story.</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.moodScroller} contentContainerStyle={s.moodScrollFixed}>{mapMoodOptions.map((option) => <MapMoodOption key={option.id} option={option} selected={mapStyle === option.id} onPress={() => setMapStyle(option.id)} />)}</ScrollView></View>
+      <View style={s.mapMoodSection}><Text style={s.sectionHeading}>Map mood</Text><Text style={s.secondary}>Choose the atmosphere for your story.</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.moodScroller} contentContainerStyle={s.moodScrollFixed}>{mapMoodOptions.map((option) => <MapMoodOption key={option.id} option={option} selected={mapStyle === option.id} tint={noticingLenses[lensIndex].accent} onPress={() => setMapStyle(option.id)} />)}</ScrollView></View>
     </ScrollView>
     </KeyboardAvoidingView>
-    <SafeAreaView edges={['bottom']} style={s.composerDock}><Pressable accessibilityRole="button" accessibilityLabel="Share story" onPress={shareStory} style={({ pressed }) => [s.composerShareButton, pressed && s.pressed]}><TrailSymbol name="square.and.arrow.up" androidName="share" size={17} color="#FFFFFF" /><Text style={s.composerShareText}>Share story</Text></Pressable></SafeAreaView>
+    <SafeAreaView edges={['bottom']} style={[s.composerDock, { backgroundColor: `${noticingLenses[lensIndex].accent}18`, borderTopColor: `${noticingLenses[lensIndex].accent}44` }]}><Pressable accessibilityRole="button" accessibilityLabel="Share story" onPress={() => setShareOptionsOpen(true)} style={({ pressed }) => [s.composerShareButton, { backgroundColor: noticingLenses[lensIndex].accent }, pressed && s.pressed]}><TrailSymbol name="square.and.arrow.up" androidName="share" size={17} color="#FFFFFF" /><Text style={s.composerShareText}>Share story</Text></Pressable></SafeAreaView>
+    <View ref={stickerRef} collapsable={false} pointerEvents="none" style={s.stickerExport}><View style={[s.stickerShape, { backgroundColor: noticingLenses[lensIndex].card, borderColor: noticingLenses[lensIndex].accent }]}><Text style={[s.stickerEyebrow, { color: noticingLenses[lensIndex].cardText }]}>{`TRAILMARK · ${noticingLenses[lensIndex].short.toUpperCase()}`}</Text><Text style={s.stickerTitle}>{title}</Text><Text style={s.stickerMeta}>{moments.length} {moments.length === 1 ? 'moment' : 'moments'} · Yellowstone</Text></View></View>
+    <Modal visible={shareOptionsOpen} transparent animationType="slide" onRequestClose={() => setShareOptionsOpen(false)}>
+      <View style={s.shareOverlay}><Pressable accessibilityLabel="Close share options" onPress={() => setShareOptionsOpen(false)} style={s.shareBackdrop} /><View style={s.shareSheet}><View style={s.sheetHandle} /><Text style={s.addTitle}>Share your story</Text><Text style={s.addSubtitle}>Take your TrailMark story with you.</Text>
+        <Pressable accessibilityRole="button" disabled={exporting} onPress={() => void exportImage('card', 'share')} style={s.shareOption}><Text style={s.shareOptionTitle}>Share story card</Text><Text style={s.shareOptionDetail}>A full image with your map and moments</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={exporting} onPress={() => void exportImage('sticker', 'share')} style={s.shareOption}><Text style={s.shareOptionTitle}>Share sticker</Text><Text style={s.shareOptionDetail}>A transparent title badge for your own photo</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={exporting} onPress={() => void exportImage('card', 'save')} style={s.shareOption}><Text style={s.shareOptionTitle}>Save image</Text><Text style={s.shareOptionDetail}>Keep the story card in Photos</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={shareText} style={s.shareOption}><Text style={s.shareOptionTitle}>Share story text</Text><Text style={s.shareOptionDetail}>Send the written story</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => setShareOptionsOpen(false)} style={s.addCancel}><Text style={s.addCancelText}>{exporting ? 'Preparing image…' : 'Cancel'}</Text></Pressable>
+      </View></View>
+    </Modal>
     <Modal visible={addTarget !== null} transparent animationType="none" onRequestClose={closeAdd}>
       <View style={s.addOverlay}><Pressable style={s.addBackdrop} onPress={closeAdd}><Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: addSheetProgress }]} /></Pressable><KeyboardAvoidingView style={s.addKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}><Animated.View style={[s.addSheet, { transform: [{ translateY: addSheetProgress.interpolate({ inputRange: [0, 1], outputRange: [360, 0] }) }] }]}>
         {addMode === 'menu' ? <><Text style={s.addTitle}>Add to this moment</Text><Text style={s.addSubtitle}>Make this part of the story yours.</Text><Pressable accessibilityRole="button" onPress={() => setAddMode('photo')} style={s.addOption}><Text style={s.addOptionTitle}>Add a photo</Text><Text style={s.addOptionDetail}>Choose from your camera roll</Text></Pressable><Pressable accessibilityRole="button" onPress={() => setAddMode('thought')} style={s.addOption}><Text style={s.addOptionTitle}>Add a thought</Text><Text style={s.addOptionDetail}>Write one more thing you want to remember</Text></Pressable></> : null}
@@ -256,27 +337,23 @@ function StoryMap({ route, moments, active, mapStyle, reducedMotion, hero = fals
   const activeCoordinate = active >= 0 ? moments[active]?.captured?.coordinate : undefined;
   const activeTarget = activeCoordinate ? fractionAlongRoute(route!, activeCoordinate) : 1;
   const progressRoute = route ? lineThroughFraction(route, routeFraction, routeFraction >= activeTarget - 0.001 ? activeCoordinate : undefined) : null;
-  const darkMap = mapStyle === 'dark' || mapStyle === 'night-trail';
-  const mapAccent = darkMap ? '#F5D477' : '#226C4A';
-  const progressAccent = darkMap ? '#FFF0A8' : '#A8E5B5';
-  const markerText = darkMap ? '#17231F' : '#FFFFFF';
-  const edgeFill = darkMap ? '#FFF8D9' : '#FFFFFF';
+  const palette = storyMapPalettes[mapStyle];
   return <Mapbox.MapView key={styleURL} style={s.flex} styleURL={styleURL} onWillStartLoadingMap={() => setLoaded(false)} onDidFinishLoadingStyle={() => setLoaded(true)} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false} logoEnabled={false} attributionEnabled={false} compassEnabled={false} scaleBarEnabled={false}>
     <Mapbox.Camera ref={camera} defaultSettings={{ centerCoordinate: center, zoomLevel: 13.5 }} />
     {loaded && mapStyle === 'terrain' ? <Mapbox.RasterDemSource id="recap-dem" url="mapbox://mapbox.mapbox-terrain-dem-v1"><Mapbox.Terrain style={{ exaggeration: 1 }} /></Mapbox.RasterDemSource> : null}
-    {loaded && route ? <Mapbox.ShapeSource id="recap-route" shape={route}><Mapbox.LineLayer id="recap-route-line" style={{ lineColor: mapAccent, lineWidth: 4, lineCap: 'round', lineJoin: 'round' }} /></Mapbox.ShapeSource> : null}
-    {loaded && progressRoute ? <Mapbox.ShapeSource id="story-progress-route" shape={progressRoute}><Mapbox.LineLayer id="story-progress-route-line" style={{ lineColor: progressAccent, lineWidth: 6, lineCap: 'round', lineJoin: 'round', lineOpacity: 0.95 }} /></Mapbox.ShapeSource> : null}
+    {loaded && route ? <Mapbox.ShapeSource id="recap-route" shape={route}><Mapbox.LineLayer id="recap-route-line" style={{ lineColor: palette.trail, lineWidth: 4, lineCap: 'round', lineJoin: 'round' }} /></Mapbox.ShapeSource> : null}
+    {loaded && progressRoute ? <Mapbox.ShapeSource id="story-progress-route" shape={progressRoute}><Mapbox.LineLayer id="story-progress-route-line" style={{ lineColor: palette.progress, lineWidth: 6, lineCap: 'round', lineJoin: 'round', lineOpacity: 0.95 }} /></Mapbox.ShapeSource> : null}
     {loaded && markerFeatures ? <Mapbox.ShapeSource id="story-markers" shape={markerFeatures} hitbox={{ width: 24, height: 24 }}>
-      <Mapbox.CircleLayer id="story-moment-circles" filter={['==', ['get', 'kind'], 'moment']} style={{ circleColor: mapAccent, circleRadius: ['case', ['==', ['get', 'index'], active], 10, 7], circleStrokeColor: darkMap ? '#FFF8D9' : '#FFFFFF', circleStrokeWidth: 2 }} />
-      <Mapbox.SymbolLayer id="story-moment-labels" filter={['==', ['get', 'kind'], 'moment']} style={{ textField: ['get', 'label'], textColor: markerText, textSize: 11, textFont: ['Open Sans Bold'], textAllowOverlap: true, textIgnorePlacement: true }} />
-      <Mapbox.CircleLayer id="story-edge-circles" filter={['in', ['get', 'kind'], ['literal', ['start', 'finish']]]} style={{ circleColor: ['case', ['==', ['get', 'kind'], 'finish'], mapAccent, edgeFill], circleRadius: 8, circleStrokeColor: mapAccent, circleStrokeWidth: 2 }} />
-      <Mapbox.SymbolLayer id="story-edge-labels" filter={['in', ['get', 'kind'], ['literal', ['start', 'finish']]]} style={{ textField: ['get', 'label'], textColor: ['case', ['==', ['get', 'kind'], 'finish'], markerText, mapAccent], textSize: 10, textFont: ['Open Sans Bold'], textOffset: [0, 2.1], textAllowOverlap: true, textIgnorePlacement: true }} />
+      <Mapbox.CircleLayer id="story-moment-circles" filter={['==', ['get', 'kind'], 'moment']} style={{ circleColor: palette.trail, circleRadius: ['case', ['==', ['get', 'index'], active], 10, 7], circleStrokeColor: palette.edgeFill, circleStrokeWidth: 2 }} />
+      <Mapbox.SymbolLayer id="story-moment-labels" filter={['==', ['get', 'kind'], 'moment']} style={{ textField: ['get', 'label'], textColor: palette.edgeText, textSize: 11, textFont: ['Open Sans Bold'], textAllowOverlap: true, textIgnorePlacement: true }} />
+      <Mapbox.CircleLayer id="story-edge-circles" filter={['in', ['get', 'kind'], ['literal', ['start', 'finish']]]} style={{ circleColor: palette.edgeFill, circleRadius: 8, circleStrokeColor: palette.edgeStroke, circleStrokeWidth: 2 }} />
+      <Mapbox.SymbolLayer id="story-edge-labels" filter={['in', ['get', 'kind'], ['literal', ['start', 'finish']]]} style={{ textField: ['get', 'label'], textColor: palette.edgeText, textSize: 10, textFont: ['Open Sans Bold'], textOffset: [0, 2.1], textAllowOverlap: true, textIgnorePlacement: true }} />
     </Mapbox.ShapeSource> : null}
   </Mapbox.MapView>;
 }
 
-function Button({ label, onPress, quiet = false }: { label: string; onPress: () => void; quiet?: boolean }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [quiet ? s.quietButton : s.primaryButton, pressed && s.pressed]}><Text style={quiet ? s.quietText : s.primaryText}>{label}</Text></Pressable>;
+function Button({ label, onPress, quiet = false, tint = '#226C4A' }: { label: string; onPress: () => void; quiet?: boolean; tint?: string }) {
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [quiet ? s.quietButton : s.primaryButton, !quiet && { backgroundColor: tint }, pressed && s.pressed]}><Text style={[quiet ? s.quietText : s.primaryText, quiet && { color: tint }]}>{label}</Text></Pressable>;
 }
 function TrailSymbol({ name, androidName, size, color }: { name: string; androidName: string; size: number; color: string }) {
   return <SymbolView name={{ ios: name as SFSymbol, android: androidName as never, web: androidName as never }} size={size} weight="semibold" tintColor={color} />;
@@ -288,17 +365,17 @@ function buildStoryThread(moments: Moment[], focus: string, additions: Record<nu
   const riverPlace = titles.find((title) => title.toLowerCase().includes('firehole')) ?? 'Firehole River approach';
   const climbPlace = titles.find((title) => title.toLowerCase().includes('overlook approach')) ?? 'Overlook approach';
   const finalPlace = titles[titles.length - 1] ?? 'Grand Prismatic overlook';
-  if (!focus.trim() || focus.toLowerCase().includes('sound')) {
-    const memoryLine = remembered.length ? `At ${remembered[0].title}, you wrote “${remembered[0].note}”${remembered.length > 1 ? `, then carried that feeling toward ${remembered[remembered.length - 1].title}.` : '.'}` : 'The memory stayed with the changing rhythm of the walk.';
-    return `From ${firstPlace} through ${riverPlace} and ${climbPlace}, the Firehole River and climbing trail shaped what you heard. At ${finalPlace}, Grand Prismatic and Midway Geyser Basin opened into view, but the memory stayed with that changing rhythm. ${memoryLine}`;
+  if (!focus.trim() || focus.toLowerCase().includes('color')) {
+    const memoryLine = remembered.length ? `At ${remembered[0].title}, you wrote “${remembered[0].note}”${remembered.length > 1 ? `, then carried that color story toward ${remembered[remembered.length - 1].title}.` : '.'}` : 'The memory stayed with the changing bands of color along the walk.';
+    return `From ${firstPlace} through ${riverPlace} and ${climbPlace}, the Firehole River and climbing trail changed the colors around you. At ${finalPlace}, Grand Prismatic and Midway Geyser Basin opened into view, with blue water surrounded by orange, yellow, green, and brown bands. ${memoryLine}`;
   }
   const focusLine = focus ? `You set out to notice ${focus.toLowerCase()} along the trail.` : 'You moved through the trail with attention to what changed around you.';
   const placeLine = `From ${firstPlace} to ${finalPlace}, the story follows what held your attention through the trail.`;
   const memoryLine = remembered.length ? `At ${remembered[0].title}, you wrote “${remembered[0].note}”${remembered.length > 1 ? ' Those words became part of the walk too.' : ''}` : 'You kept a few places that made the walk feel like more than a route.';
   return `${focusLine} ${placeLine} ${memoryLine}`;
 }
-function MapMoodOption({ option, selected, onPress }: { option: { id: StoryMapStyle; label: string; colors: [string, string] }; selected: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={`${option.label} map mood`} onPress={onPress} style={({ pressed }) => [s.moodOption, selected && s.moodOptionSelected, pressed && s.pressed]}><View style={[s.moodSwatch, { backgroundColor: option.colors[0] }]}><View style={[s.moodRiver, { backgroundColor: option.colors[1] }]} /><View style={s.moodRoute} /></View><Text numberOfLines={1} style={[s.moodLabel, selected && s.moodLabelSelected]}>{selected ? `✓ ${option.label}` : option.label}</Text></Pressable>;
+function MapMoodOption({ option, selected, tint, onPress }: { option: { id: StoryMapStyle; label: string; colors: [string, string] }; selected: boolean; tint: string; onPress: () => void }) {
+  return <Pressable accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={`${option.label} map mood`} onPress={onPress} style={({ pressed }) => [s.moodOption, selected && { borderWidth: 2, borderColor: tint, padding: 4 }, pressed && s.pressed]}><View style={[s.moodSwatch, { backgroundColor: option.colors[0] }]}><View style={[s.moodRiver, { backgroundColor: option.colors[1] }]} /><View style={[s.moodRoute, { backgroundColor: tint }]} /></View><Text numberOfLines={1} style={[s.moodLabel, selected && { color: tint, fontWeight: '800' }]}>{selected ? `✓ ${option.label}` : option.label}</Text></Pressable>;
 }
 function parse<T>(value?: string): T[] { try { const data = JSON.parse(value ?? '[]'); return Array.isArray(data) ? data : []; } catch { return []; } }
 function shape(coordinates: number[][]): Route | null { return coordinates.length > 1 ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } } : null; }
@@ -345,6 +422,8 @@ const s = StyleSheet.create({
   addMomentButton: { width: 86, height: 64, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.06)' },
   addMomentText: { color: '#FFFFFF', fontSize: 32, fontWeight: '400', lineHeight: 34 },
   addOverlay: { flex: 1, justifyContent: 'flex-end' },
+  shareOverlay: { flex: 1, justifyContent: 'flex-end' }, shareBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(12,24,18,0.34)' }, shareSheet: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 30, borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: '#F5F7F3' }, sheetHandle: { alignSelf: 'center', width: 38, height: 5, marginBottom: 16, borderRadius: 3, backgroundColor: '#C5D0C8' }, shareOption: { minHeight: 62, justifyContent: 'center', paddingHorizontal: 15, marginTop: 9, borderRadius: 15, borderWidth: 1, borderColor: '#DCE4D9', backgroundColor: '#FFFFFF' }, shareOptionTitle: { color: '#18271E', fontSize: 16, fontWeight: '700' }, shareOptionDetail: { color: '#4D6053', fontSize: 13, marginTop: 3 },
+  stickerExport: { position: 'absolute', left: -2000, top: 0, width: 900, height: 420, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }, stickerShape: { paddingHorizontal: 54, paddingVertical: 42, borderRadius: 52, borderWidth: 8, alignItems: 'center' }, stickerEyebrow: { fontSize: 25, fontWeight: '900', letterSpacing: 3 }, stickerTitle: { color: '#FFFFFF', fontSize: 56, fontWeight: '900', marginTop: 14 }, stickerMeta: { color: '#E5EEF0', fontSize: 25, fontWeight: '700', marginTop: 8 },
   addKeyboard: { width: '100%', justifyContent: 'flex-end' },
   addBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(12, 24, 18, 0.32)' },
   addSheet: { paddingHorizontal: 22, paddingTop: 22, paddingBottom: 28, borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: '#F5F7F3' },
@@ -371,8 +450,8 @@ const s = StyleSheet.create({
   heroStoryButton: { position: 'absolute', right: 18, bottom: 18, minHeight: 46, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, borderRadius: 14, backgroundColor: '#226C4A' }, heroStoryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' }, playbackIconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
   secondary: { fontSize: 14, lineHeight: 20, color: '#4D6053' }, momentIntro: { paddingTop: 28, paddingBottom: 24 }, sectionTitle: { fontSize: 22, fontWeight: '700', color: '#18271E', letterSpacing: -0.35, marginBottom: 6 },
   chapter: { marginBottom: 32 }, chapterHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }, number: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#DFEBDD', alignItems: 'center', justifyContent: 'center' }, numberText: { color: '#226C4A', fontSize: 13, fontWeight: '700' }, chapterTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#18271E' }, chapterImage: { width: '100%', aspectRatio: 1.28, borderRadius: 20 }, chapterQuote: { fontSize: 22, lineHeight: 30, color: '#18271E', marginTop: 16, fontWeight: '500' }, context: { fontSize: 15, lineHeight: 23, color: '#4D6053', marginTop: 10 },
-  dock: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 10, borderTopWidth: 1, borderTopColor: '#DCE4D9', backgroundColor: '#F5F7F3' }, primaryButton: { minHeight: 54, borderRadius: 18, backgroundColor: '#226C4A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, primaryText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' }, quietButton: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' }, quietText: { fontSize: 15, fontWeight: '600', color: '#226C4A' }, pressed: { opacity: 0.65 },
+  dock: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 10, borderTopWidth: 1, borderTopColor: '#DCE4D9', backgroundColor: '#F5F7F3' }, primaryButton: { minHeight: 54, borderRadius: 18, backgroundColor: '#226C4A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, primaryText: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' }, quietButton: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' }, quietText: { fontSize: 15, fontWeight: '600', color: '#226C4A' }, pressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   composerDock: { paddingHorizontal: 18, paddingTop: 10, backgroundColor: '#F5F7F3', borderTopWidth: 1, borderTopColor: '#DCE4D9' }, composerShareButton: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 18, backgroundColor: '#226C4A' }, composerShareText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
   composerContent: { paddingHorizontal: 18, paddingTop: 0, maxWidth: 600, width: '100%', alignSelf: 'center', paddingBottom: 44 }, film: { height: 500, overflow: 'hidden', borderRadius: 28, backgroundColor: '#DFEBDD' }, filmTop: { position: 'absolute', top: 16, left: 16, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: 'rgba(245,247,243,0.94)' }, filmBrand: { fontSize: 14, fontWeight: '800', color: '#18271E' }, filmMeta: { fontSize: 12, color: '#4D6053', marginTop: 1 }, filmCaption: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, paddingTop: 34, backgroundColor: 'rgba(24,39,30,0.88)' }, filmPhoto: { width: 86, height: 64, borderRadius: 10, marginBottom: 10 }, filmTitle: { fontSize: 27, lineHeight: 31, fontWeight: '800', letterSpacing: -0.6, color: '#FFFFFF' }, filmDescription: { fontSize: 14, lineHeight: 20, color: '#DCE8DD', marginTop: 7 }, filmBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 12 }, filmBadge: { minHeight: 28, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)' }, filmBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' }, editorSection: { marginTop: 30, marginBottom: 30 }, sectionHeading: { fontSize: 22, fontWeight: '700', color: '#18271E', letterSpacing: -0.3, marginBottom: 16 }, fieldLabel: { fontSize: 15, fontWeight: '600', color: '#18271E', marginBottom: 8 }, titleInput: { minHeight: 54, padding: 14, borderWidth: 1, borderColor: '#C6D3C5', borderRadius: 15, color: '#18271E', fontSize: 17, backgroundColor: '#FFFFFF' }, settingGroup: { marginTop: 16, paddingHorizontal: 16, borderRadius: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE4D9' }, settingRow: { minHeight: 78, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14 }, settingTitle: { fontSize: 16, fontWeight: '600', color: '#18271E' }, settingDetail: { maxWidth: 190, fontSize: 13, lineHeight: 18, color: '#4D6053', marginTop: 3 }, settingDivider: { height: 1, backgroundColor: '#E3E9E1' }, segmented: { flexDirection: 'row', padding: 3, borderRadius: 11, backgroundColor: '#E9EFE5' }, segment: { minHeight: 34, paddingHorizontal: 10, borderRadius: 8, justifyContent: 'center' }, segmentActive: { backgroundColor: '#226C4A' }, segmentText: { color: '#4D6053', fontSize: 13, fontWeight: '600' }, segmentTextActive: { color: '#FFFFFF' }, mapMoodSection: { marginBottom: 10 }, moodScroll: { gap: 10, paddingTop: 14, paddingBottom: 8, paddingRight: 18 }, moodOption: { width: 104, padding: 5, borderRadius: 16, borderWidth: 1, borderColor: '#D5E0D2', backgroundColor: '#FFFFFF' }, moodOptionSelected: { borderWidth: 2, borderColor: '#226C4A', padding: 4 }, moodSwatch: { height: 76, overflow: 'hidden', borderRadius: 11, justifyContent: 'center' }, moodRiver: { position: 'absolute', height: 21, width: 130, backgroundColor: '#9BC9CF', transform: [{ rotate: '-24deg' }] }, moodRoute: { width: 94, height: 3, borderRadius: 2, backgroundColor: '#226C4A', transform: [{ rotate: '22deg' }] }, moodLabel: { color: '#4D6053', fontSize: 12, fontWeight: '600', marginTop: 8, marginBottom: 3, textAlign: 'center' }, moodLabelSelected: { color: '#226C4A', fontWeight: '800' }, mapPin: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#FFFFFF', backgroundColor: '#226C4A', alignItems: 'center', justifyContent: 'center' }, activePin: { width: 36, height: 36, borderRadius: 18, borderWidth: 3 }, pinText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' }, edgePin: { minHeight: 26, paddingHorizontal: 9, borderRadius: 13, borderWidth: 2, borderColor: '#226C4A', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }, finishPin: { backgroundColor: '#226C4A' }, edgePinText: { color: '#226C4A', fontSize: 11, fontWeight: '800' }, finishPinText: { color: '#FFFFFF' },
-  summaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, marginBottom: 8 }, summaryHeaderLabel: { marginBottom: 0 }, summaryAction: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E9EFE5' }, summaryInput: { minHeight: 100, padding: 14, borderWidth: 1, borderColor: '#C6D3C5', borderRadius: 16, color: '#18271E', fontSize: 15, lineHeight: 21, backgroundColor: '#FFFFFF' },
+  summaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, marginBottom: 8 }, summaryHeaderLabel: { marginBottom: 0 }, summaryAction: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E9EFE5' }, summaryInput: { minHeight: 100, padding: 14, borderWidth: 1, borderColor: '#C6D3C5', borderRadius: 16, color: '#18271E', fontSize: 15, lineHeight: 21, backgroundColor: '#FFFFFF' }, storyLensSection: { marginTop: 18, padding: 16, borderRadius: 18, backgroundColor: '#F4F8EF', borderWidth: 1, borderColor: '#DCE8D9' }, storyLensHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, storyLensValue: { maxWidth: 145, fontSize: 13, fontWeight: '800', textAlign: 'right' }, lensSlider: { paddingTop: 18, paddingBottom: 2 }, lensTrack: { height: 4, marginHorizontal: 16, borderRadius: 2, backgroundColor: '#D8E5DA' }, lensTrackFill: { height: 4, borderRadius: 2 }, lensOptions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -10 }, lensOption: { alignItems: 'center', gap: 7 }, lensDot: { width: 20, height: 20, borderRadius: 10, borderWidth: 3, borderColor: '#F4F8EF' }, lensDotSelected: { width: 24, height: 24, borderRadius: 12, borderWidth: 4, borderColor: '#FFFFFF', shadowColor: '#233128', shadowOpacity: 0.16, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 2 }, lensLabel: { color: '#4D6053', fontSize: 11, fontWeight: '600' }, lensLabelSelected: { color: '#18271E', fontWeight: '800' }, storyLensDetail: { color: '#226C4A', fontSize: 13, fontWeight: '700', marginTop: 4 }, noticeSegments: { flexDirection: 'row', padding: 3, borderRadius: 11, backgroundColor: '#E9EFE5' },
 });

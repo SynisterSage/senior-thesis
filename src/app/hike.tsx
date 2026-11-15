@@ -13,10 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getPublishedTrail } from '@/lib/trails';
 import { getNoticingPrompt, grandPrismaticMoments } from '@/lib/trail-moments';
 import { clearActiveHikeDraft, getActiveHikeDraft, saveActiveHikeDraft, type CapturedTrailMoment } from '@/lib/trail-stories';
+import { isNodConnected } from '@/lib/onboarding';
 
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 const fallbackMarkCoordinate: Position = [-110.836, 44.520];
-const nodConnected = true;
 const routeCenter: Position = [-110.836, 44.520];
 const storyCameraPadding = { paddingTop: 75, paddingBottom: 250, paddingLeft: 24, paddingRight: 24 };
 const anchorCameraPadding = { paddingTop: 80, paddingBottom: 340, paddingLeft: 24, paddingRight: 24 };
@@ -156,6 +156,7 @@ if (mapboxToken) Mapbox.setAccessToken(mapboxToken);
 
 export default function HikeScreen() {
   const { slug, notice } = useLocalSearchParams<{ slug?: string; notice?: string }>();
+  const nodConnected = isNodConnected();
   const storedDraft = getActiveHikeDraft();
   const matchingDraft = storedDraft?.slug === (slug ?? 'grand-prismatic-overlook') ? storedDraft : undefined;
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -219,7 +220,7 @@ export default function HikeScreen() {
     ]));
     pulse.start();
     return () => pulse.stop();
-  }, [nodConnectionPulse]);
+  }, [nodConnected, nodConnectionPulse]);
 
   useEffect(() => {
     void Location.requestForegroundPermissionsAsync();
@@ -358,9 +359,26 @@ export default function HikeScreen() {
   const returnToHike = () => {
     setStoryStyleLoaded(false);
     setStoryIntro(false);
+    setStoryIndex(null);
+    setStoryProgressIndex(null);
+    setStoryRevealed(false);
+    setStorySheetOpen(false);
+    setStoryReviewing(false);
+    storySheetOffset.setValue(420);
     cameraRef.current?.setCamera({ centerCoordinate: routeCenter, zoomLevel: 14.5, pitch: 0, heading: 0, padding: { paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }, animationDuration: 800, animationMode: 'easeTo' });
   };
   const finishHike = () => {
+    const finishMoment = grandPrismaticMoments.find((moment) => moment.routeEnd) ?? grandPrismaticMoments[grandPrismaticMoments.length - 1];
+    const finishAlreadyMarked = markedMoments.some((moment) => moment.momentId === finishMoment.id);
+    if (!finishAlreadyMarked) {
+      const finishCoordinate = routeCoordinates[routeCoordinates.length - 1] ?? fallbackMarkCoordinate;
+      const finalMark: CapturedTrailMoment = { id: `moment-${markSequenceRef.current++}`, momentId: finishMoment.id, coordinate: finishCoordinate, source: nodConnected ? 'nod' : 'phone', createdAt: new Date().toISOString() };
+      const nextMarks = [...markedMoments, finalMark];
+      setMarkedMoments(nextMarks);
+      persistDraft(nextMarks, storyNotes);
+      setLatestMarkId(finalMark.id);
+      setLastMarkedTitle(finishMoment.title);
+    }
     if (storyCameraTimer.current) clearTimeout(storyCameraTimer.current);
     setStoryStyleLoaded(false);
     setStoryIntro(true);
@@ -558,7 +576,7 @@ export default function HikeScreen() {
         ) : null}
         {markedMoments.map((moment) => (
           <Mapbox.MarkerView key={moment.id} coordinate={moment.coordinate} allowOverlap allowOverlapWithPuck>
-            {storyProgressIndex === markedMoments.indexOf(moment) && !storyRevealed ? <Pressable accessibilityRole="button" accessibilityLabel={`Open moment ${storyProgressIndex + 1}`} onPress={openStorySheet} style={styles.storyPinTarget}><Animated.View style={[styles.storyPulseRing, { transform: [{ scale: storyPulse }] }]} /><View style={styles.storyPin}><Text style={styles.storyPinText}>{storyProgressIndex + 1}</Text></View></Pressable> : storyProgressIndex !== null && markedMoments.indexOf(moment) < storyProgressIndex ? <Pressable accessibilityRole="button" accessibilityLabel={`Review moment ${markedMoments.indexOf(moment) + 1}`} onPress={() => reviewStoryMoment(markedMoments.indexOf(moment))} style={styles.storyPinTarget}><View style={styles.storyPin}><Text style={styles.storyPinText}>{markedMoments.indexOf(moment) + 1}</Text></View></Pressable> : <View style={[styles.momentMarker, latestMarkId === moment.id && styles.momentMarkerLatest]}>{latestMarkId === moment.id ? <Animated.View pointerEvents="none" style={[styles.momentMarkerBloom, { opacity: markBloomOpacity, transform: [{ scale: markBloomScale }] }]} /> : null}<View style={styles.momentMarkerCore} /></View>}
+            {storyProgressIndex === markedMoments.indexOf(moment) && !storyRevealed ? <Pressable accessibilityRole="button" accessibilityLabel={`Open moment ${storyProgressIndex + 1}`} onPress={openStorySheet} style={styles.storyPinTarget}><Animated.View style={[styles.storyPulseRing, { transform: [{ scale: storyPulse }] }]} /><View style={styles.storyPin}><Text style={styles.storyPinText}>{storyProgressIndex + 1}</Text></View></Pressable> : storyProgressIndex !== null && markedMoments.indexOf(moment) < storyProgressIndex ? <Pressable accessibilityRole="button" accessibilityLabel={`Review moment ${markedMoments.indexOf(moment) + 1}`} onPress={() => reviewStoryMoment(markedMoments.indexOf(moment))} style={styles.storyPinTarget}><View style={styles.storyPin}><Text style={styles.storyPinText}>{markedMoments.indexOf(moment) + 1}</Text></View></Pressable> : <View style={[styles.momentMarker, moment.momentId === grandPrismaticMoments[grandPrismaticMoments.length - 1]?.id && styles.finishMomentMarker, latestMarkId === moment.id && styles.momentMarkerLatest]}>{latestMarkId === moment.id ? <Animated.View pointerEvents="none" style={[styles.momentMarkerBloom, { opacity: markBloomOpacity, transform: [{ scale: markBloomScale }] }]} /> : null}<View style={[styles.momentMarkerCore, moment.momentId === grandPrismaticMoments[grandPrismaticMoments.length - 1]?.id && styles.finishMomentMarkerCore]} /></View>}
           </Mapbox.MarkerView>
         ))}
         {routeCoordinates.length > 0 && !storyIntro && storyIndex === null ? (
@@ -594,6 +612,7 @@ export default function HikeScreen() {
             <TrailSymbol name="minus" androidName="remove" size={19} color="#FFFFFF" />
           </Pressable>
         </View>}
+        {storyIndex !== null ? <View style={styles.storyExitControls}><Pressable accessibilityRole="button" accessibilityLabel="Skip revisiting for now and return to hike" onPress={returnToHike} style={({ pressed }) => [styles.storyExitControl, pressed && styles.pressed]}><TrailSymbol name="xmark" androidName="close" size={18} color="#193323" /></Pressable></View> : null}
 
         {selectedAnchor ? <>
           <Pressable accessibilityRole="button" accessibilityLabel="Close trail information" onPress={() => closeAnchor()} style={styles.anchorDismissLayer} />
@@ -616,10 +635,10 @@ export default function HikeScreen() {
         </> : null}
 
         {storyIntro ? <View style={styles.storyIntro}>
-          <Text accessibilityRole="header" style={styles.storyTitle}>You’re back.</Text>
+          <View style={styles.storyIntroHeader}><Text accessibilityRole="header" style={styles.storyTitle}>You’re back.</Text><Pressable accessibilityRole="button" accessibilityLabel="Skip revisiting for now and return to hike" onPress={returnToHike} style={styles.storyIntroClose}><TrailSymbol name="xmark" androidName="close" size={16} color="#4D5E53" /></Pressable></View>
           <Text style={styles.storyDescription}>{markedCount ? `${markedCount} ${markedCount === 1 ? 'moment is' : 'moments are'} waiting along this walk.` : 'There are no moments marked on this walk yet.'}</Text>
           {markedCount > 0 ? <Pressable accessibilityRole="button" onPress={startStory} style={styles.storyButton}><Text style={styles.storyButtonText}>Begin revisiting →</Text></Pressable> : null}
-          <Pressable accessibilityRole="button" onPress={returnToHike} style={styles.storyBack}><Text style={styles.storyBackText}>Return to hike</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={returnToHike} style={styles.storyBack}><Text style={styles.storyBackText}>Skip for now</Text></Pressable>
         </View> : storyIndex === null ? <View style={styles.bottomArea}>
           {showGuidance && !demoComplete ? (
             <Animated.View pointerEvents="none" style={[styles.statusCard, { opacity: guidanceOpacity, transform: [{ translateY: guidanceOffset }] }]}>
@@ -632,9 +651,9 @@ export default function HikeScreen() {
           ) : null}
           {showMarkNotice ? <Animated.View pointerEvents="none" style={[styles.markNotice, { opacity: markNoticeOpacity, transform: [{ translateY: markNoticeOffset }] }]}><View style={styles.markNoticeIcon}><TrailSymbol name="checkmark" androidName="check" size={15} color="#FFFFFF" /></View><View style={styles.statusCopy}><Text style={styles.statusTitle}>{nodConnected ? 'Nod marked' : 'Moment marked'}</Text><Text style={styles.statusText}>{lastMarkedTitle ?? 'You can make sense of it after the hike.'}</Text></View></Animated.View> : null}
           <Animated.View pointerEvents={selectedAnchor ? 'none' : 'auto'} style={[styles.actions, { opacity: actionsOpacity, transform: [{ translateY: actionsOffset }] }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel={demoComplete ? 'All demo moments captured' : nodConnected ? 'Use phone fallback to mark a moment' : 'Mark a moment'} disabled={demoComplete} onPress={() => markMoment(nodConnected ? 'phone' : 'nod')} style={({ pressed }) => [styles.markButton, nodConnected && styles.phoneMarkButton, demoComplete && styles.markButtonComplete, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={demoComplete ? 'All demo moments captured' : nodConnected ? 'Use phone instead to mark a moment' : 'Mark a moment'} disabled={demoComplete} onPress={() => markMoment(nodConnected ? 'phone' : 'nod')} style={({ pressed }) => [styles.markButton, nodConnected && styles.phoneMarkButton, demoComplete && styles.markButtonComplete, pressed && styles.pressed]}>
               <TrailSymbol name={nodConnected ? 'iphone' : 'circle.fill'} androidName={nodConnected ? 'phone_iphone' : 'radio_button_checked'} size={17} color="#193323" />
-              <Text style={styles.markText}>{demoComplete ? 'Moments captured' : nodConnected ? 'Mark on phone' : 'Mark moment'}</Text>
+              <Text style={styles.markText}>{demoComplete ? 'Moments captured' : nodConnected ? 'Use phone instead' : 'Mark moment'}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Finish hike" onPress={finishHike} style={({ pressed }) => [styles.finishButton, pressed && styles.pressed]}>
               <Text style={styles.finishText}>Finish</Text>
@@ -652,7 +671,7 @@ export default function HikeScreen() {
             {!storyRevealed ? <>
               <Text style={styles.chapterTitle}>What do you remember?</Text>
               <Text style={styles.chapterPrompt}>{activeStoryMoment ? getNoticingPrompt(activeStoryMoment, noticingFocus) : null}</Text>
-              <TextInput accessibilityLabel="Write what you remember" multiline value={storyNote} onChangeText={setStoryNote} placeholder="A sound, a view, a feeling, something small..." placeholderTextColor="#75857C" style={styles.chapterInput} />
+              <TextInput accessibilityLabel="Write what you remember" multiline value={storyNote} onChangeText={setStoryNote} placeholder="A color, a view, a feeling, something small..." placeholderTextColor="#75857C" style={styles.chapterInput} />
               <Pressable accessibilityRole="button" onPress={() => revealStoryMoment()} style={styles.chapterButton}><Text style={styles.chapterButtonText}>Reveal this moment →</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => { setStoryNote(''); revealStoryMoment(''); }} style={styles.chapterSkip}><Text style={styles.chapterSkipText}>I’ll come back to this</Text></Pressable>
             </> : <>
@@ -803,6 +822,8 @@ const styles = StyleSheet.create({
   chapterMemoryLabel: { color: '#4D5E53', fontSize: 13, fontWeight: '800', marginBottom: 7 },
   chapterMemory: { color: '#15241C', fontSize: 17, lineHeight: 25, fontWeight: '700' },
   storyIntro: { width: '100%', marginTop: 'auto', marginBottom: 8, padding: 22, borderRadius: 24, backgroundColor: 'rgba(245,247,243,0.97)', gap: 10 },
+  storyIntroHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  storyIntroClose: { width: 36, height: 36, marginTop: -4, marginRight: -4, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#E9EFE5' },
   storyTitle: { color: '#15241C', fontSize: 34, fontWeight: '800', letterSpacing: -0.8 },
   storyDescription: { color: '#4D5E53', fontSize: 16, lineHeight: 23 },
   storyButton: { minHeight: 54, marginTop: 10, borderRadius: 16, backgroundColor: '#226C4A', alignItems: 'center', justifyContent: 'center' },
@@ -816,6 +837,8 @@ const styles = StyleSheet.create({
   roundControl: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#183126', borderWidth: 1, borderColor: '#2C5A43' },
   mapControls: { position: 'absolute', right: 12, top: 285, gap: 9 },
   mapControl: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(24, 49, 38, 0.94)', borderWidth: 1, borderColor: '#2C5A43' },
+  storyExitControls: { position: 'absolute', top: 68, right: 12 },
+  storyExitControl: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(245,247,243,0.96)', borderWidth: 1, borderColor: '#D7E3DD' },
   leaveControl: { backgroundColor: '#C7463D', borderColor: '#E1766D' },
   titleBlock: { alignItems: 'flex-start', gap: 5, paddingHorizontal: 2 },
   title: { color: '#183126', fontSize: 17, fontWeight: '800', letterSpacing: -0.2, textAlign: 'left' },
@@ -829,9 +852,11 @@ const styles = StyleSheet.create({
   featurePoint: { width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#4B8B6A' },
   featurePointCore: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4B8B6A' },
   momentMarker: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1B4B37', borderWidth: 3, borderColor: '#FFFFFF' },
+  finishMomentMarker: { backgroundColor: '#F07455', borderColor: '#FFFFFF' },
   momentMarkerLatest: { width: 30, height: 30, borderRadius: 15, borderColor: '#C5F0CE' },
   momentMarkerBloom: { position: 'absolute', width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#A8DFB6', backgroundColor: 'rgba(168,223,182,0.26)' },
   momentMarkerCore: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#A8DFB6' },
+  finishMomentMarkerCore: { backgroundColor: '#FFFFFF' },
   anchorSheet: { position: 'absolute', left: 16, right: 16, bottom: 88, overflow: 'hidden', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.97)', borderWidth: 1, borderColor: '#D7E3DD', shadowColor: '#193323', shadowOpacity: 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
   anchorDismissLayer: StyleSheet.absoluteFill,
   anchorImage: { width: '100%', height: 164 },

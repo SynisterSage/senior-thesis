@@ -63,42 +63,66 @@ export const grandPrismaticMoments: PreparedTrailMoment[] = [
   },
 ];
 
-const noticingPrompts: Record<string, string[]> = {
-  sound: [
-    'What sound stayed with you first?',
-    'How did the river change the sound of the trail?',
-    'What became louder or quieter as you climbed?',
-    'What did you hear beneath the view?',
-  ],
-  light: [
+const noticingPrompts: { match: RegExp; prompts: string[] }[] = [
+  { match: /color|colour|orange|yellow|green|blue/, prompts: [
+    'What color did you notice first?',
+    'Where did the colors change as the trail moved beside the water?',
+    'What shifted from green to orange, yellow, or blue as you climbed?',
+    'Which color or combination stayed with you beneath the view?',
+  ] },
+  { match: /sound|hear|quiet|echo|rhythm/, prompts: [
+    'What sound reached you first at the trailhead?',
+    'How did the river sound change as you came alongside it?',
+    'As the trail climbed, what could you hear around you?',
+    'What sound, or quiet, stayed with you at the overlook?',
+  ] },
+  { match: /wind|open|openness|wide|horizon|space/, prompts: [
+    'What did the trail keep out of view at first?',
+    'How did the river change the feel of the approach?',
+    'Where did the landscape start to open up?',
+    'What felt different when you reached the wide view?',
+  ] },
+  { match: /scale|distance|vast|mountain|perspective/, prompts: [
+    'How large did the landscape feel from the trailhead?',
+    'What helped you sense the scale as you came alongside the river?',
+    'How did the climb change your sense of distance?',
+    'What finally gave the spring its scale?',
+  ] },
+  { match: /texture|surface|rough|smooth|rock|ground/, prompts: [
+    'What texture caught your attention first?',
+    'What changed underfoot near the river?',
+    'What textures shifted as the trail climbed?',
+    'What surface or detail stayed with you at the overlook?',
+  ] },
+  { match: /light|glow|shadow|sun/, prompts: [
     'Where did the light first catch your attention?',
     'How did the light move across the trail?',
     'What changed as the view opened up?',
-    'What color or glow pulled you in?',
-  ],
-  water: [
+    'What glow or shadow stayed with you?',
+  ] },
+  { match: /water|river|pool|lake|shore/, prompts: [
     'What did the water make you notice first?',
     'How did being near the river change the walk?',
     'What movement did you notice in the water or landscape?',
     'What stayed with you about the spring?',
-  ],
-  movement: [
+  ] },
+  { match: /movement|motion|flow|steam|drift|current/, prompts: [
     'What movement caught your attention first?',
-    'How did the trail move around the river?',
-    'What changed as your body climbed?',
+    'How did the water move as the trail came alongside it?',
+    'What changed as you climbed toward the overlook?',
     'What movement made the view feel alive?',
-  ],
-  change: [
+  ] },
+  { match: /change|shift|transition/, prompts: [
     'What changed as you began the walk?',
     'What shifted when the river came alongside you?',
     'What changed as the trail climbed?',
     'What changed when the view opened up?',
-  ],
-};
+  ] },
+];
 
 export function getNoticingPrompt(moment: PreparedTrailMoment, focus?: string) {
   const normalized = focus?.toLowerCase() ?? '';
-  const match = Object.keys(noticingPrompts).find((keyword) => normalized.includes(keyword));
-  if (!match) return moment.prompt;
-  return noticingPrompts[match][grandPrismaticMoments.findIndex((candidate) => candidate.id === moment.id)] ?? moment.prompt;
+  const matchedPrompts = noticingPrompts.find(({ match }) => match.test(normalized))?.prompts;
+  if (!matchedPrompts) return moment.prompt;
+  return matchedPrompts[grandPrismaticMoments.findIndex((candidate) => candidate.id === moment.id)] ?? moment.prompt;
 }

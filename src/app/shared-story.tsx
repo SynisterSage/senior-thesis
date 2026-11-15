@@ -14,7 +14,7 @@ export default function SharedStoryScreen() {
   const story = storyId === 'wide-view'
     ? { title: 'The trail opened up', note: 'I did not expect the overlook to feel so open after the trees.', meta: '3 moments · Shared by Maya' }
     : storyId === 'first-visit'
-      ? { title: 'First time through', note: 'Mostly birds, wind, and the sound of my own steps.', meta: '5 moments · Shared anonymously' }
+      ? { title: 'First time through', note: 'The colors kept changing as the trail opened toward the spring.', meta: '5 moments · Shared anonymously' }
       : { title: 'A quiet morning at the lake', note: 'The light changed when I reached the water.', meta: '4 moments · Shared anonymously' };
 
   const shareStory = () => void Share.share({ title: story.title, message: `${story.title}\n${story.note}\n${trailName}\nMade with TrailMark.` });

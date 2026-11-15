@@ -21,6 +21,9 @@ export type SavedTrailStory = {
   marks?: CapturedTrailMoment[];
   routeCoordinates?: number[][];
   noticingFocus?: string;
+  noticeTheme?: 'water' | 'living' | 'earth';
+  mapMood?: string;
+  storyThread?: string;
 };
 
 type NewTrailStory = Omit<SavedTrailStory, 'id' | 'createdAt'>;
@@ -33,6 +36,7 @@ export type ActiveHikeDraft = {
   marks: CapturedTrailMoment[];
   notes: string[];
   noticingFocus?: string;
+  noticeTheme?: 'water' | 'living' | 'earth';
   updatedAt: string;
 };
 
@@ -58,6 +62,16 @@ export function saveTrailStory(story: NewTrailStory): SavedTrailStory {
   };
   globalThis.localStorage.setItem(storageKey, JSON.stringify([savedStory, ...getSavedTrailStories()]));
   return savedStory;
+}
+
+export function updateTrailStory(id: string, changes: Partial<NewTrailStory>): SavedTrailStory | undefined {
+  const stories = getSavedTrailStories();
+  const index = stories.findIndex((story) => story.id === id);
+  if (index < 0) return undefined;
+  const updated = { ...stories[index], ...changes };
+  stories[index] = updated;
+  globalThis.localStorage.setItem(storageKey, JSON.stringify(stories));
+  return updated;
 }
 
 export function deleteSavedTrailStory(id: string) {

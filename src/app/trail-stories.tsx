@@ -4,135 +4,347 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors } from '@/constants/trailmark-theme';
 import { getPublishedTrail, type Trail } from '@/lib/trails';
 
-const palette = colors.light;
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 if (mapboxToken) Mapbox.setAccessToken(mapboxToken);
 
-const storyImage = require('../../assets/trails/grand-prismatic/spring.jpg');
-const storyImageTwo = require('../../assets/trails/grand-prismatic/overlook.jpg');
+type Coordinate = [number, number];
+type TrailEcho = {
+  id: string;
+  routeFraction: number;
+  fallbackPosition: { left: `${number}%`; top: `${number}%` };
+  title: string;
+  place: string;
+  note: string;
+  meta: string;
+  image: number;
+};
+type PositionedEcho = TrailEcho & { coordinate: Coordinate };
 
-const sampleStories = [
+const routeCenter: Coordinate = [-110.836, 44.52];
+const mapPadding = { paddingTop: 100, paddingBottom: 430, paddingLeft: 24, paddingRight: 24 };
+const overviewZoom = 15.1;
+const echoZoom = 20.8;
+
+const trailEchoes: TrailEcho[] = [
   {
-    id: 'quiet-water',
-    title: 'A quiet morning at the lake',
+    id: 'water-light',
+    routeFraction: 0.22,
+    fallbackPosition: { left: '27%', top: '42%' },
+    title: 'The light changed',
+    place: 'Near the water',
     note: 'The light changed when I reached the water.',
-    meta: '4 moments · Shared anonymously',
-    image: storyImage,
+    meta: 'Shared anonymously',
+    image: require('../../assets/trails/grand-prismatic/spring.jpg'),
   },
   {
     id: 'wide-view',
+    routeFraction: 0.52,
+    fallbackPosition: { left: '53%', top: '30%' },
     title: 'The trail opened up',
-    note: 'I did not expect the overlook to feel so open after the trees.',
-    meta: '3 moments · Shared by Maya',
-    image: storyImageTwo,
+    place: 'Overlook approach',
+    note: 'I did not expect the trail to feel so open after the trees.',
+    meta: 'Shared by Maya',
+    image: require('../../assets/trails/grand-prismatic/overlook.jpg'),
   },
   {
-    id: 'first-visit',
-    title: 'First time through',
-    note: 'Mostly birds, wind, and the sound of my own steps.',
-    meta: '5 moments · Shared anonymously',
-    image: storyImage,
+    id: 'changing-color',
+    routeFraction: 0.8,
+    fallbackPosition: { left: '72%', top: '62%' },
+    title: 'The colors kept changing',
+    place: 'Along the spring',
+    note: 'The colors kept changing as the trail opened toward the spring.',
+    meta: 'Shared anonymously',
+    image: require('../../assets/trails/grand-prismatic/grand-prismatic-spring.jpg'),
   },
-] as const;
+];
 
 export default function TrailStoriesScreen() {
   const { slug } = useLocalSearchParams<{ slug?: string }>();
+  const cameraRef = useRef<Mapbox.Camera>(null);
+  const [pulse] = useState(() => new Animated.Value(0));
+  const [guidanceOpacity] = useState(() => new Animated.Value(1));
+  const [guidanceOffset] = useState(() => new Animated.Value(0));
+  const hasPlayedIntro = useRef(false);
+  const hasOpenedFirstEcho = useRef(false);
+  const guidanceDismissed = useRef(false);
   const [trail, setTrail] = useState<Trail | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [showGuidance, setShowGuidance] = useState(true);
+  const [selectedEcho, setSelectedEcho] = useState<PositionedEcho | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(overviewZoom);
   const trailName = trail?.name?.replace(/ Trail$/, '') ?? 'Grand Prismatic Overlook';
+  const positionedEchoes = useMemo(() => {
+    const routeCoordinates = outboundRouteCoordinates(trail?.route_geojson?.geometry.coordinates ?? []);
+    return trailEchoes.map((echo) => ({ ...echo, coordinate: coordinateAtFraction(routeCoordinates, echo.routeFraction) }));
+  }, [trail]);
 
   useEffect(() => {
     if (!slug) return;
     void getPublishedTrail(slug).then(setTrail);
   }, [slug]);
 
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 1000, useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  useEffect(() => {
+    if (!mapReady || hasPlayedIntro.current || !trail?.route_geojson) return;
+    hasPlayedIntro.current = true;
+    const timer = setTimeout(() => {
+      cameraRef.current?.setCamera({
+        centerCoordinate: routeCenter,
+        zoomLevel: overviewZoom,
+        pitch: 38,
+        heading: 22,
+        padding: mapPadding,
+        animationDuration: 1500,
+        animationMode: 'flyTo',
+      });
+    }, 120);
+    const firstEchoTimer = setTimeout(() => {
+      if (hasOpenedFirstEcho.current || !positionedEchoes[0]) return;
+      hasOpenedFirstEcho.current = true;
+      const firstEcho = positionedEchoes[0];
+      setSelectedEcho(firstEcho);
+      cameraRef.current?.setCamera({
+        centerCoordinate: firstEcho.coordinate,
+        zoomLevel: echoZoom,
+        pitch: 56,
+        heading: 26,
+        padding: mapPadding,
+        animationDuration: 1250,
+        animationMode: 'flyTo',
+      });
+    }, 1900);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(firstEchoTimer);
+    };
+  }, [mapReady, positionedEchoes, trail]);
+
+  const hideGuidance = useCallback(() => {
+    if (guidanceDismissed.current) return;
+    guidanceDismissed.current = true;
+    Animated.parallel([
+      Animated.timing(guidanceOpacity, { toValue: 0, duration: 220, useNativeDriver: true }),
+      Animated.timing(guidanceOffset, { toValue: 12, duration: 220, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) setShowGuidance(false);
+    });
+  }, [guidanceOffset, guidanceOpacity]);
+
+  useEffect(() => {
+    if (mapboxToken && !mapReady) return;
+    const timer = setTimeout(hideGuidance, 4200);
+    return () => clearTimeout(timer);
+  }, [hideGuidance, mapReady]);
+
   const shareInvite = () => {
     void Share.share({
-      title: `Trail stories from ${trailName}`,
-      message: `See shared moments from ${trailName} in TrailMark.`,
+      title: `Trail echoes from ${trailName}`,
+      message: `See what people noticed along ${trailName} in TrailMark.`,
     });
+  };
+
+  const focusTrail = () => {
+    setSelectedEcho(null);
+    setZoomLevel(overviewZoom);
+    cameraRef.current?.setCamera({
+      centerCoordinate: routeCenter,
+      zoomLevel: overviewZoom,
+      pitch: 38,
+      heading: 22,
+      padding: mapPadding,
+      animationDuration: 1050,
+      animationMode: 'flyTo',
+    });
+  };
+
+  const selectEcho = (echo: PositionedEcho, index: number) => {
+    hideGuidance();
+    setSelectedEcho(echo);
+    cameraRef.current?.setCamera({
+      centerCoordinate: echo.coordinate,
+      zoomLevel: echoZoom,
+      pitch: 56,
+      heading: 26 + index * 12,
+      padding: mapPadding,
+      animationDuration: 1250,
+      animationMode: 'flyTo',
+    });
+  };
+
+  const nextEcho = () => {
+    if (!selectedEcho) return;
+    const currentIndex = positionedEchoes.findIndex((echo) => echo.id === selectedEcho.id);
+    const nextIndex = (currentIndex + 1) % positionedEchoes.length;
+    selectEcho(positionedEchoes[nextIndex], nextIndex);
+  };
+
+  const selectedEchoIndex = selectedEcho ? positionedEchoes.findIndex((echo) => echo.id === selectedEcho.id) : -1;
+  const isLastEcho = selectedEchoIndex === positionedEchoes.length - 1;
+
+  const zoomMap = (delta: number) => {
+    hideGuidance();
+    const nextZoom = Math.min(21.5, Math.max(11.8, zoomLevel + delta));
+    setZoomLevel(nextZoom);
+    cameraRef.current?.setCamera({ zoomLevel: nextZoom, animationDuration: 420, animationMode: 'easeTo' });
   };
 
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <SafeAreaView edges={['top']} style={styles.safeTop}>
-        <View style={styles.header}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backIcon}>‹</Text>
-          </Pressable>
-          <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>Trail stories</Text>
-            <Text numberOfLines={1} style={styles.headerTitle}>{trailName}</Text>
+      {mapboxToken ? (
+        <Mapbox.MapView
+          style={styles.map}
+          styleURL={Mapbox.StyleURL.Outdoors}
+          onDidFinishLoadingStyle={() => setMapReady(true)}
+          scrollEnabled
+          zoomEnabled
+          rotateEnabled
+          pitchEnabled
+          logoEnabled={false}
+          attributionEnabled={false}
+          compassEnabled={false}
+          scaleBarEnabled={false}
+        >
+          <Mapbox.Camera ref={cameraRef} defaultSettings={{ centerCoordinate: routeCenter, zoomLevel: overviewZoom, pitch: 0, heading: 0 }} />
+          <Mapbox.RasterDemSource id="trail-echoes-terrain" url="mapbox://mapbox.mapbox-terrain-dem-v1" maxZoomLevel={14}>
+            <Mapbox.Terrain style={{ exaggeration: 1.15 }} />
+          </Mapbox.RasterDemSource>
+          {trail?.route_geojson ? <Mapbox.ShapeSource id="trail-echoes-route" shape={trail.route_geojson}><Mapbox.LineLayer id="trail-echoes-route-line" style={{ lineColor: '#277D54', lineWidth: 5, lineCap: 'round', lineJoin: 'round', lineOpacity: 0.95 }} /></Mapbox.ShapeSource> : null}
+          {positionedEchoes.map((echo, index) => <Mapbox.MarkerView key={echo.id} id={`trail-echo-${echo.id}`} coordinate={echo.coordinate} allowOverlap>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open echo from ${echo.place}`} onPress={() => selectEcho(echo, index)} style={styles.echoHitTarget}>
+              <Animated.View style={[styles.echoPulse, selectedEcho?.id === echo.id && styles.echoPulseSelected, { transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.18] }) }] }]}>
+                <View style={styles.echoCore} />
+              </Animated.View>
+            </Pressable>
+          </Mapbox.MarkerView>)}
+        </Mapbox.MapView>
+      ) : (
+        <View style={styles.mapFallback}>
+          <View style={styles.fallbackRoute} />
+          {trailEchoes.map((echo, index) => <Pressable key={echo.id} accessibilityRole="button" accessibilityLabel={`Open echo from ${echo.place}`} onPress={() => selectEcho({ ...echo, coordinate: routeCenter }, index)} style={[styles.fallbackMoment, echo.fallbackPosition, selectedEcho?.id === echo.id && styles.fallbackMomentSelected]} />)}
+        </View>
+      )}
+
+      <SafeAreaView style={styles.overlay} edges={['top', 'bottom']} pointerEvents="box-none">
+        {selectedEcho ? <Pressable accessibilityRole="button" accessibilityLabel="Close echo" onPress={focusTrail} style={styles.dismissLayer} /> : null}
+        <View style={styles.topBar}>
+          <View style={styles.titleBlock}>
+            <Text style={styles.eyebrow}>Trail echoes</Text>
+            <Text numberOfLines={1} style={styles.title}>{trailName}</Text>
+            <Text style={styles.subtitle}>A few featured moments from this trail</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Share trail stories" onPress={shareInvite} style={styles.headerButton}>
-            <TrailSymbol name="square.and.arrow.up" androidName="share" size={17} color={palette.text} />
+        </View>
+
+        <View style={styles.mapControls}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={({ pressed }) => [styles.mapControl, styles.leaveControl, pressed && styles.pressed]}>
+            <TrailSymbol name="xmark" androidName="close" size={18} color="#FFFFFF" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Share trail echoes" onPress={shareInvite} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
+            <TrailSymbol name="square.and.arrow.up" androidName="share" size={17} color="#FFFFFF" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Recenter trail echoes" onPress={focusTrail} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
+            <TrailSymbol name="scope" androidName="center_focus_strong" size={18} color="#FFFFFF" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={() => zoomMap(1)} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
+            <TrailSymbol name="plus" androidName="add" size={19} color="#FFFFFF" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={() => zoomMap(-1)} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
+            <TrailSymbol name="minus" androidName="remove" size={19} color="#FFFFFF" />
           </Pressable>
         </View>
-      </SafeAreaView>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.intro}>
-          <Text style={styles.title}>What people noticed here</Text>
-          <Text style={styles.subtitle}>Nod moments from the same trail, shared by the people who walked it.</Text>
-        </View>
-
-        <View style={styles.mapCard}>
-          <View style={styles.mapCardHeader}>
-            <View>
-              <Text style={styles.mapLabel}>Nod moments shared here</Text>
-              <Text style={styles.mapCount}>18 stories · 42 moments</Text>
+        {selectedEcho ? <View style={styles.bottomArea}>
+          <View style={styles.echoSheet}>
+            <Image source={selectedEcho.image} contentFit="cover" style={styles.echoImage} />
+            <View style={styles.echoCopy}>
+              <View style={styles.echoHeading}>
+                <View style={styles.echoTextBlock}>
+                  <Text style={styles.echoEyebrow}>Featured moment · {selectedEchoIndex + 1} of {positionedEchoes.length}</Text>
+                  <Text style={styles.echoTitle}>{selectedEcho.title}</Text>
+                  <Text style={styles.echoSubtitle}>{selectedEcho.place} · {selectedEcho.meta}</Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Close echo" onPress={focusTrail} style={styles.echoClose}>
+                  <TrailSymbol name="xmark" androidName="close" size={15} color="#193323" />
+                </Pressable>
+              </View>
+              <Text style={styles.echoContext}>“{selectedEcho.note}”</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={isLastEcho ? 'Return to trail overview' : 'Show the next trail echo'} onPress={isLastEcho ? focusTrail : nextEcho} style={({ pressed }) => [styles.echoAction, pressed && styles.pressed]}>
+                <TrailSymbol name={isLastEcho ? 'arrow.uturn.backward' : 'arrow.right'} androidName={isLastEcho ? 'undo' : 'arrow_forward'} size={16} color="#FFFFFF" />
+                <Text style={styles.echoActionText}>{isLastEcho ? 'Return to trail overview' : 'Keep exploring the trail'}</Text>
+              </Pressable>
             </View>
-            <TrailSymbol name="sparkles" androidName="auto_awesome" size={20} color={palette.accent} />
           </View>
-          <View style={styles.mapFrame}>
-            {mapboxToken ? (
-              <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL.Outdoors} logoEnabled={false} attributionEnabled={false} scaleBarEnabled={false} scrollEnabled={false} zoomEnabled={false} rotateEnabled={false} pitchEnabled={false}>
-                <Mapbox.Camera defaultSettings={{ centerCoordinate: [-110.836, 44.52], zoomLevel: 11.8 }} />
-                {trail?.route_geojson ? <Mapbox.ShapeSource id="shared-stories-route" shape={trail.route_geojson}><Mapbox.LineLayer id="shared-stories-route-line" style={{ lineColor: palette.accent, lineWidth: 4, lineCap: 'round', lineJoin: 'round' }} /></Mapbox.ShapeSource> : null}
-                <Mapbox.PointAnnotation id="shared-moment-one" coordinate={[-110.84, 44.522]}><View style={styles.mapMoment}><View style={styles.mapMomentCore} /></View></Mapbox.PointAnnotation>
-                <Mapbox.PointAnnotation id="shared-moment-two" coordinate={[-110.834, 44.519]}><View style={styles.mapMoment}><View style={styles.mapMomentCore} /></View></Mapbox.PointAnnotation>
-                <Mapbox.PointAnnotation id="shared-moment-three" coordinate={[-110.829, 44.518]}><View style={styles.mapMoment}><View style={styles.mapMomentCore} /></View></Mapbox.PointAnnotation>
-              </Mapbox.MapView>
-            ) : <View style={styles.mapFallback}><View style={styles.fallbackRoute} /><View style={[styles.fallbackMoment, { left: '27%', top: '42%' }]} /><View style={[styles.fallbackMoment, { left: '53%', top: '30%' }]} /><View style={[styles.fallbackMoment, { left: '72%', top: '62%' }]} /></View>}
-          </View>
-          <Text style={styles.mapFootnote}>Each point represents a place someone chose to remember.</Text>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <View><Text style={styles.sectionTitle}>Shared stories</Text><Text style={styles.sectionSubtitle}>Open a story to walk through someone else’s moments.</Text></View>
-          <Text style={styles.sectionMeta}>3 of 18</Text>
-        </View>
-
-        <View style={styles.storyList}>
-          {sampleStories.map((story) => <SharedStoryCard key={story.id} {...story} onPress={() => router.push({ pathname: '/shared-story', params: { storyId: story.id, trailName } })} />)}
-        </View>
-
-        <View style={styles.sharePrompt}>
-          <View style={styles.sharePromptIcon}><TrailSymbol name="bubble.left.and.bubble.right.fill" androidName="forum" size={20} color={palette.accent} /></View>
-          <View style={styles.sharePromptCopy}><Text style={styles.sharePromptTitle}>Have a moment from this trail?</Text><Text style={styles.sharePromptText}>Finish your hike story to share it here.</Text></View>
-          <TrailSymbol name="chevron.right" androidName="chevron_right" size={17} color={palette.secondary} />
-        </View>
-      </ScrollView>
+        </View> : showGuidance ? <View style={styles.guideArea}>
+          <Animated.View pointerEvents="none" style={[styles.statusCard, { opacity: guidanceOpacity, transform: [{ translateY: guidanceOffset }] }]}>
+            <View style={styles.statusIcon}><TrailSymbol name="sparkles" androidName="auto_awesome" size={17} color="#DDF2E3" /></View>
+            <View style={styles.statusCopy}><Text style={styles.statusTitle}>Explore the trail’s echoes</Text><Text style={styles.statusText}>Tap a glow to hear what someone chose to remember here.</Text></View>
+          </Animated.View>
+        </View> : null}
+      </SafeAreaView>
     </View>
   );
 }
 
-function SharedStoryCard({ title, note, meta, image, onPress }: { title: string; note: string; meta: string; image: number; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.storyCard, pressed && styles.pressed]}>
-    <Image source={image} contentFit="cover" style={styles.storyImage} />
-    <View style={styles.storyCopy}>
-      <Text style={styles.storyTitle}>{title}</Text>
-      <Text numberOfLines={2} style={styles.storyNote}>“{note}”</Text>
-      <View style={styles.storyFooter}><Text style={styles.storyMeta}>{meta}</Text><Text style={styles.viewStory}>View story  ›</Text></View>
-    </View>
-  </Pressable>;
+function coordinateAtFraction(coordinates: number[][], fraction: number): Coordinate {
+  if (coordinates.length < 2) return [-110.836, 44.52];
+
+  const segments = coordinates.slice(1).map((coordinate, index) => {
+    const previous = coordinates[index];
+    const longitudeDelta = coordinate[0] - previous[0];
+    const latitudeDelta = coordinate[1] - previous[1];
+    return Math.sqrt(longitudeDelta * longitudeDelta + latitudeDelta * latitudeDelta);
+  });
+  const totalDistance = segments.reduce((sum, distance) => sum + distance, 0);
+  const targetDistance = totalDistance * Math.max(0, Math.min(1, fraction));
+  let traveled = 0;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segmentDistance = segments[index];
+    if (traveled + segmentDistance >= targetDistance) {
+      const progress = segmentDistance ? (targetDistance - traveled) / segmentDistance : 0;
+      const start = coordinates[index];
+      const end = coordinates[index + 1];
+      return [start[0] + (end[0] - start[0]) * progress, start[1] + (end[1] - start[1]) * progress];
+    }
+    traveled += segmentDistance;
+  }
+
+  const last = coordinates[coordinates.length - 1];
+  return [last[0], last[1]];
+}
+
+function outboundRouteCoordinates(coordinates: number[][]): number[][] {
+  if (coordinates.length < 2) return coordinates;
+
+  const start = coordinates[0];
+  let turnaroundIndex = coordinates.length - 1;
+  let farthestDistance = -1;
+
+  coordinates.forEach((coordinate, index) => {
+    const longitudeDelta = coordinate[0] - start[0];
+    const latitudeDelta = coordinate[1] - start[1];
+    const distanceFromStart = longitudeDelta * longitudeDelta + latitudeDelta * latitudeDelta;
+    if (distanceFromStart > farthestDistance) {
+      farthestDistance = distanceFromStart;
+      turnaroundIndex = index;
+    }
+  });
+
+  return coordinates.slice(0, turnaroundIndex + 1);
 }
 
 function TrailSymbol({ name, androidName, size, color }: { name: string; androidName: string; size: number; color: string }) {
@@ -140,48 +352,44 @@ function TrailSymbol({ name, androidName, size, color }: { name: string; android
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.background },
-  safeTop: { backgroundColor: palette.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingTop: 6, paddingBottom: 12 },
-  backButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line },
-  backIcon: { color: palette.text, fontSize: 31, lineHeight: 31, fontWeight: '300', marginTop: -4 },
-  headerCopy: { flex: 1, gap: 2 },
-  eyebrow: { color: palette.accent, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
-  headerTitle: { color: palette.text, fontSize: 18, fontWeight: '800' },
-  headerButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line },
-  scroll: { paddingHorizontal: 18, paddingBottom: 42 },
-  intro: { paddingTop: 18, paddingBottom: 20, gap: 7 },
-  title: { color: palette.text, fontSize: 29, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
-  subtitle: { color: palette.secondary, fontSize: 14, lineHeight: 20 },
-  mapCard: { padding: 14, borderRadius: 24, backgroundColor: '#EAF1EA', borderWidth: 1, borderColor: '#D9E5DB' },
-  mapCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 11 },
-  mapLabel: { color: palette.text, fontSize: 16, fontWeight: '800' },
-  mapCount: { color: palette.secondary, fontSize: 12, marginTop: 2 },
-  mapFrame: { height: 194, overflow: 'hidden', borderRadius: 17, backgroundColor: '#D6E4D8' },
+  screen: { flex: 1, backgroundColor: '#DCE9DE' },
   map: { ...StyleSheet.absoluteFill },
-  mapFootnote: { color: palette.secondary, fontSize: 11, lineHeight: 15, marginTop: 10 },
-  mapMoment: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(34,108,74,0.2)' },
-  mapMomentCore: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.accent, borderWidth: 2, borderColor: '#FFFFFF' },
   mapFallback: { ...StyleSheet.absoluteFill, backgroundColor: '#DCE9DE' },
-  fallbackRoute: { position: 'absolute', left: '20%', top: '38%', width: '60%', height: 4, borderRadius: 3, backgroundColor: palette.accent, transform: [{ rotate: '-18deg' }] },
-  fallbackMoment: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: palette.accent, borderWidth: 3, borderColor: '#FFFFFF' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginTop: 28, marginBottom: 12 },
-  sectionTitle: { color: palette.text, fontSize: 21, fontWeight: '800', letterSpacing: -0.3 },
-  sectionSubtitle: { color: palette.secondary, fontSize: 12, lineHeight: 17, marginTop: 4 },
-  sectionMeta: { color: palette.secondary, fontSize: 11, fontWeight: '700', paddingBottom: 3 },
-  storyList: { gap: 12 },
-  storyCard: { flexDirection: 'row', minHeight: 130, overflow: 'hidden', borderRadius: 20, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line },
-  storyImage: { width: 112, backgroundColor: '#CBDCCF' },
-  storyCopy: { flex: 1, justifyContent: 'center', padding: 14, gap: 7 },
-  storyTitle: { color: palette.text, fontSize: 16, lineHeight: 20, fontWeight: '800' },
-  storyNote: { color: palette.secondary, fontSize: 13, lineHeight: 18 },
-  storyFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2 },
-  storyMeta: { flex: 1, color: '#718178', fontSize: 10, fontWeight: '600' },
-  viewStory: { color: palette.accent, fontSize: 11, fontWeight: '800' },
-  sharePrompt: { flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 24, padding: 15, borderRadius: 18, backgroundColor: '#F0F5F0' },
-  sharePromptIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCEDE0' },
-  sharePromptCopy: { flex: 1, gap: 3 },
-  sharePromptTitle: { color: palette.text, fontSize: 13, fontWeight: '800' },
-  sharePromptText: { color: palette.secondary, fontSize: 11, lineHeight: 15 },
-  pressed: { opacity: 0.78 },
+  fallbackRoute: { position: 'absolute', left: '10%', top: '47%', width: '78%', height: 5, borderRadius: 3, backgroundColor: '#277D54', transform: [{ rotate: '22deg' }] },
+  fallbackMoment: { position: 'absolute', width: 20, height: 20, borderRadius: 10, backgroundColor: '#277D54', borderWidth: 4, borderColor: '#FFFFFF' },
+  fallbackMomentSelected: { width: 31, height: 31, borderRadius: 16, marginLeft: -5.5, marginTop: -5.5, backgroundColor: '#B5D9C0' },
+  overlay: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 12 },
+  topBar: { alignSelf: 'flex-start', maxWidth: '92%', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.92)' },
+  titleBlock: { alignItems: 'flex-start', gap: 5, paddingHorizontal: 2 },
+  eyebrow: { color: '#24794C', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  title: { color: '#193323', fontSize: 18, lineHeight: 22, fontWeight: '800', marginTop: 2 },
+  subtitle: { color: '#4D6053', fontSize: 11, lineHeight: 15, marginTop: 2 },
+  mapControls: { alignSelf: 'flex-end', gap: 10, marginTop: 'auto', marginBottom: 212 },
+  mapControl: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#193F30', borderWidth: 1, borderColor: '#2F6D50', shadowColor: '#102419', shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
+  leaveControl: { backgroundColor: '#C7463D', borderColor: '#E1766D' },
+  bottomArea: { position: 'absolute', left: 0, right: 0, bottom: 12 },
+  guideArea: { position: 'absolute', left: 16, right: 16, bottom: 12 },
+  statusCard: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13, borderRadius: 18, backgroundColor: 'rgba(19,39,29,0.94)', borderWidth: 1, borderColor: '#345640' },
+  statusIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#24794C' },
+  statusCopy: { flex: 1, gap: 2 },
+  statusTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  statusText: { color: '#B9D2C0', fontSize: 12, lineHeight: 17 },
+  dismissLayer: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(17,35,25,0.08)' },
+  echoSheet: { marginHorizontal: 16, overflow: 'hidden', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.97)', borderWidth: 1, borderColor: '#D7E3DD', shadowColor: '#193323', shadowOpacity: 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
+  echoImage: { width: '100%', height: 164 },
+  echoCopy: { padding: 15, gap: 9 },
+  echoHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  echoTextBlock: { flex: 1, gap: 3 },
+  echoEyebrow: { color: '#24794C', fontSize: 10, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
+  echoTitle: { color: '#193323', fontSize: 20, lineHeight: 24, fontWeight: '800', letterSpacing: -0.3 },
+  echoSubtitle: { color: '#718279', fontSize: 13, lineHeight: 17, fontWeight: '600' },
+  echoContext: { color: '#496255', fontSize: 14, lineHeight: 20 },
+  echoClose: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#EAF1EC' },
+  echoAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 3, borderRadius: 14, backgroundColor: '#226C4A' },
+  echoActionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  echoHitTarget: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center' },
+  echoPulse: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(39,125,84,0.28)' },
+  echoPulseSelected: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(39,125,84,0.42)' },
+  echoCore: { width: 13, height: 13, borderRadius: 7, backgroundColor: '#277D54', borderWidth: 3, borderColor: '#FFFFFF' },
+  pressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
 });

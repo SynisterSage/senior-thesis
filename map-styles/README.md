@@ -6,6 +6,7 @@ These are Mapbox Standard starter styles for the story player. Import a JSON fil
 
 - `trailmark-field-guide.json` — quiet daylight terrain for the default story.
 - `trailmark-golden-hour.json` — warm dusk replay for a more cinematic story.
+- `trailmark-blue-hour-3d.json` — deep blue dusk palette with 3D buildings and terrain-friendly detail.
 
 The route, moment pins, and TrailMark interaction layers stay in the app. These files define only the basemap mood.
 

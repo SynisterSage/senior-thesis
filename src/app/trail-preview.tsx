@@ -10,6 +10,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '@/constants/trailmark-theme';
 import { getPublishedTrail, type Trail } from '@/lib/trails';
+import { getTrailNoticingSuggestion } from '@/lib/trail-noticing';
+import { isNodConnected } from '@/lib/onboarding';
 
 const palette = colors.light;
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -17,15 +19,18 @@ const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 if (mapboxToken) Mapbox.setAccessToken(mapboxToken);
 
 const heroImage = require('../../assets/trails/grand-prismatic/overlook.jpg');
-const trailImagesTrailhead = require('../../assets/trails/grand-prismatic/trailhead.jpg');
 const trailImagesPhoto = require('../../assets/trails/grand-prismatic/spring.jpg');
+const nodAsset = require('../../assets/images/transparent-nod.png');
 export default function TrailPreviewScreen() {
   const { slug } = useLocalSearchParams<{ slug?: string }>();
+  const suggestion = getTrailNoticingSuggestion(slug);
   const [trail, setTrail] = useState<Trail | null>(null);
-  const [customNotice, setCustomNotice] = useState('');
+  const [customNotice, setCustomNotice] = useState(() => suggestion?.focus ?? '');
   const [noticeSaved, setNoticeSaved] = useState(false);
   const [saved, setSaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const nodConnected = isNodConnected();
+  const suggestionStatus = !customNotice.trim() ? 'Optional' : customNotice.trim() === suggestion?.focus ? 'For this trail' : 'Your detail';
 
   useEffect(() => {
     if (!slug) return;
@@ -143,11 +148,9 @@ export default function TrailPreviewScreen() {
           </View>
 
           <View style={styles.mediaRow}>
-            <View style={styles.mediaTile}>
-              <Image source={trailImagesTrailhead} contentFit="cover" style={styles.mediaImage} />
-              <View style={styles.mediaShade} />
-              <View style={styles.mediaPlay}><TrailSymbol name="location.fill" androidName="location_on" size={16} color="#FFFFFF" /></View>
-              <Text style={styles.mediaLabel}>Trailhead</Text>
+            <View style={[styles.mediaTile, styles.nodTile]}>
+              <Image source={nodAsset} contentFit="contain" style={styles.nodTileImage} />
+              <Text style={styles.nodTileLabel}>{nodConnected ? 'Nod ready' : 'Phone marking'}</Text>
             </View>
             <View style={styles.mediaTile}>
               <Image source={trailImagesPhoto} contentFit="cover" style={styles.mediaImage} />
@@ -166,12 +169,12 @@ export default function TrailPreviewScreen() {
             <View style={styles.noticeBlock}>
               <View style={styles.noticeHeading}>
                 <Text style={styles.smallTitle}>What do you want to notice?</Text>
-                <TrailSymbol name="sparkles" androidName="auto_awesome" size={20} color={palette.accent} />
+                <View style={styles.suggestionTag}><TrailSymbol name="sparkles" androidName="auto_awesome" size={14} color={palette.accent} /><Text style={styles.suggestionTagText}>{suggestionStatus}</Text></View>
               </View>
               <View style={styles.noticeInputShell}>
                 <TextInput
-                  accessibilityLabel="What do you want to notice?"
-                  placeholder="Type a thought or feeling"
+                  accessibilityLabel="Suggested noticing detail. Edit or clear it to make it your own."
+                  placeholder="Add your own detail"
                   placeholderTextColor="#7A897E"
                   value={customNotice}
                   onChangeText={(value) => { setCustomNotice(value); setNoticeSaved(false); }}
@@ -197,8 +200,23 @@ export default function TrailPreviewScreen() {
                 </View>
                 <TrailSymbol name="map" androidName="map" size={20} color={palette.accent} />
               </View>
-              {(trail?.landmarks ?? []).map((landmark, index) => <LandmarkRow key={landmark.title} index={index + 1} title={landmark.title} note={landmark.note} />)}
+              {(trail?.landmarks ?? []).map((landmark, index) => <LandmarkRow key={landmark.title} index={index + 1} title={landmark.title} note={landmark.note} accent={palette.accent} soft="#E3F0E7" />)}
             </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Explore what people noticed on this trail"
+              onPress={() => router.push({ pathname: '/trail-stories', params: { slug: trail?.slug ?? slug ?? 'grand-prismatic-overlook' } })}
+              style={({ pressed }) => [styles.echoLink, pressed && styles.pressed]}
+            >
+              <View style={styles.echoLinkIcon}><TrailSymbol name="bubble.left.and.bubble.right.fill" androidName="forum" size={20} color={palette.accent} /></View>
+              <View style={styles.echoLinkCopy}>
+                <Text style={styles.echoLinkEyebrow}>Trail echoes</Text>
+                <Text style={styles.echoLinkTitle}>Explore what people noticed here</Text>
+                <Text style={styles.echoLinkText}>Moments gathered along this route.</Text>
+              </View>
+              <Text style={styles.echoLinkArrow}>›</Text>
+            </Pressable>
 
           </View>
           </ScrollView>
@@ -223,8 +241,8 @@ function StatCard({ label, value, symbol, androidSymbol }: { label: string; valu
   return <View style={styles.statCard}><View style={styles.statLabelRow}><TrailSymbol name={symbol} androidName={androidSymbol} size={15} color={palette.accent} /><Text style={styles.statLabel}>{label}</Text></View><Text style={styles.statValue}>{value}</Text></View>;
 }
 
-function LandmarkRow({ index, title, note }: { index: number; title: string; note: string }) {
-  return <View style={styles.landmarkRow}><View style={styles.landmarkNumber}><Text style={styles.landmarkNumberText}>{index}</Text></View><View style={styles.landmarkCopy}><Text style={styles.landmarkTitle}>{title}</Text><Text style={styles.landmarkNote}>{note}</Text></View></View>;
+function LandmarkRow({ index, title, note, accent, soft }: { index: number; title: string; note: string; accent: string; soft: string }) {
+  return <View style={styles.landmarkRow}><View style={[styles.landmarkNumber, { backgroundColor: soft }]}><Text style={[styles.landmarkNumberText, { color: accent }]}>{index}</Text></View><View style={styles.landmarkCopy}><Text style={styles.landmarkTitle}>{title}</Text><Text style={styles.landmarkNote}>{note}</Text></View></View>;
 }
 
 const styles = StyleSheet.create({
@@ -262,6 +280,9 @@ const styles = StyleSheet.create({
   routePointEnd: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#E99A55', borderWidth: 3, borderColor: '#FFFFFF' },
   mediaRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   mediaTile: { flex: 1, height: 126, overflow: 'hidden', borderRadius: 18, backgroundColor: '#DCE5DC' },
+  nodTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F4EF' },
+  nodTileImage: { width: 118, height: 86, marginTop: -4 },
+  nodTileLabel: { color: palette.secondary, fontSize: 11, fontWeight: '800', marginTop: -7 },
   mediaImage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   mediaShade: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(12, 25, 17, 0.24)' },
   mediaPlay: { position: 'absolute', left: '50%', top: '50%', width: 38, height: 38, marginLeft: -19, marginTop: -19, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(26, 50, 37, 0.62)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)' },
@@ -279,6 +300,8 @@ const styles = StyleSheet.create({
   sectionCopy: { color: palette.secondary, fontSize: 13, lineHeight: 18 },
   noticeBlock: { gap: 11, paddingTop: 20, borderTopWidth: 1, borderColor: palette.line },
   noticeHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  suggestionTag: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, borderRadius: 15, backgroundColor: '#F0F4EF' },
+  suggestionTagText: { color: palette.accent, fontSize: 11, fontWeight: '800' },
   smallTitle: { color: palette.text, fontSize: 18, fontWeight: '800' },
   noticeInputShell: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: palette.line, borderRadius: 17, backgroundColor: '#F7F9F6' },
   noticeInput: { flex: 1, minHeight: 58, paddingHorizontal: 16, color: palette.text, fontSize: 15 },
@@ -292,9 +315,16 @@ const styles = StyleSheet.create({
   landmarkCopy: { flex: 1, gap: 3 },
   landmarkTitle: { color: palette.text, fontSize: 15, lineHeight: 19, fontWeight: '700' },
   landmarkNote: { color: palette.secondary, fontSize: 13, lineHeight: 18 },
+  echoLink: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 15, borderRadius: 20, backgroundColor: '#F0F5F0', borderWidth: 1, borderColor: '#D9E6DA' },
+  echoLinkIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#DCEDE0' },
+  echoLinkCopy: { flex: 1, gap: 3 },
+  echoLinkEyebrow: { color: palette.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
+  echoLinkTitle: { color: palette.text, fontSize: 15, lineHeight: 19, fontWeight: '800' },
+  echoLinkText: { color: palette.secondary, fontSize: 12, lineHeight: 17 },
+  echoLinkArrow: { fontSize: 27, fontWeight: '300' },
   footerSafe: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderTopWidth: 1, borderColor: palette.line },
   startButton: { width: '100%', minHeight: 56, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: palette.accent },
   startText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
   startArrow: { color: '#FFFFFF', fontSize: 21, fontWeight: '700' },
-  pressed: { opacity: 0.78 },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
 });
