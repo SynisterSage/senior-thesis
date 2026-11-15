@@ -8,7 +8,7 @@ import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, Vi
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '@/constants/trailmark-theme';
-import { isNodConnected } from '@/lib/onboarding';
+import { getNodStatus } from '@/lib/nod';
 import { getSavedTrails, removeSavedTrail, saveTrail } from '@/lib/saved-trails';
 import { noticingFocuses } from '@/lib/noticing-focuses';
 
@@ -81,7 +81,7 @@ export default function ExploreScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeYellowstoneIndex, setActiveYellowstoneIndex] = useState(0);
   const [savedTrailIds, setSavedTrailIds] = useState<string[]>([]);
-  const [nodConnected, setNodConnectedState] = useState(isNodConnected);
+  const [nodStatus, setNodStatus] = useState(getNodStatus());
   const [echoTransition] = useState(() => new Animated.Value(1));
   const openSampleTrail = () => Alert.alert('Preview trail', 'Grand Prismatic Overlook is the complete trail available in this prototype.');
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -98,7 +98,7 @@ export default function ExploreScreen() {
 
   useFocusEffect(useCallback(() => {
     setSavedTrailIds(getSavedTrails().map((trail) => trail.id));
-    setNodConnectedState(isNodConnected());
+    setNodStatus(getNodStatus());
   }, []));
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function ExploreScreen() {
     <SafeAreaView style={styles.safe} edges={[]}>
       <StatusBar style="dark" />
       <ScrollView automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never" contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}><Text accessibilityRole="header" style={styles.title}>Explore trails</Text><View style={styles.headerActions}><Pressable accessibilityRole="button" accessibilityLabel={nodConnected ? 'Open Nod, connected with 87 percent battery' : 'Open Nod setup'} onPress={() => router.navigate('/(tabs)/nod')} style={({ pressed }) => [styles.nodStatusButton, pressed && styles.pressed]}><TrailSymbol name={nodConnected ? 'battery.75' : 'battery.0'} androidName="battery_std" size={18} color={nodConnected ? '#3D8B5B' : palette.secondary} />{nodConnected ? <Text style={styles.nodBatteryText}>87%</Text> : null}</Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Open saved trails${savedTrailIds.length ? `, ${savedTrailIds.length} saved` : ''}`} onPress={() => router.push('/saved-trails')} style={({ pressed }) => [styles.savedButton, pressed && styles.pressed]}><TrailSymbol name={savedTrailIds.length ? 'heart.fill' : 'heart'} androidName={savedTrailIds.length ? 'favorite' : 'favorite_border'} size={17} color={savedTrailIds.length ? '#B65751' : palette.accent} />{savedTrailIds.length ? <Text style={styles.savedButtonCount}>{savedTrailIds.length}</Text> : null}</Pressable></View></View>
+        <View style={styles.header}><Text accessibilityRole="header" style={styles.title}>Explore trails</Text><View style={styles.headerActions}><Pressable accessibilityRole="button" accessibilityLabel={nodStatus.connected ? `Open Nod, connected with ${nodStatus.batteryPercent} percent battery` : 'Open Nod setup'} onPress={() => router.navigate('/(tabs)/nod')} style={({ pressed }) => [styles.nodStatusButton, pressed && styles.pressed]}><TrailSymbol name={nodStatus.connected ? 'battery.75' : 'battery.0'} androidName="battery_std" size={18} color={nodStatus.connected ? '#3D8B5B' : palette.secondary} />{nodStatus.connected ? <Text style={styles.nodBatteryText}>{nodStatus.batteryPercent}%</Text> : null}</Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Open saved trails${savedTrailIds.length ? `, ${savedTrailIds.length} saved` : ''}`} onPress={() => router.push('/saved-trails')} style={({ pressed }) => [styles.savedButton, pressed && styles.pressed]}><TrailSymbol name={savedTrailIds.length ? 'heart.fill' : 'heart'} androidName={savedTrailIds.length ? 'favorite' : 'favorite_border'} size={17} color={savedTrailIds.length ? '#B65751' : palette.accent} />{savedTrailIds.length ? <Text style={styles.savedButtonCount}>{savedTrailIds.length}</Text> : null}</Pressable></View></View>
         <View style={styles.location}><TrailSymbol name="location.fill" androidName="location_on" size={14} color={palette.accent} /><Text style={styles.locationText}>Yellowstone National Park</Text><TrailSymbol name="chevron.down" androidName="expand_more" size={15} color={palette.secondary} /></View>
         <View style={styles.search}><TrailSymbol name="magnifyingglass" androidName="search" size={17} color="#72827E" /><TextInput accessibilityLabel="Search trails, parks, and places" value={searchQuery} onChangeText={setSearchQuery} autoCapitalize="none" autoCorrect={false} returnKeyType="search" placeholder="Search trails, parks, places" placeholderTextColor="#7A8986" style={styles.searchInput} />{searchQuery ? <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearchQuery('')} style={styles.clearSearch}><TrailSymbol name="xmark" androidName="close" size={13} color={palette.secondary} /></Pressable> : null}</View>
 

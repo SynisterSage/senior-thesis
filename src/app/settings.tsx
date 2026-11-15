@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '@/constants/trailmark-theme';
 import { isNodConnected } from '@/lib/onboarding';
+import { getNodStatus } from '@/lib/nod';
 import { getIncludeWords, getLiveMapStyle, getReplayPace, setIncludeWords, setLiveMapStyle, setReplayPace, type LiveMapStyle, type ReplayPace } from '@/lib/trailmark-preferences';
 
 const palette = colors.light;
@@ -15,12 +16,15 @@ const palette = colors.light;
 const legalLinks = {
   privacy: 'https://trailmark.app/privacy',
   terms: 'https://trailmark.app/terms',
+  help: 'https://trailmark.app/help',
+  troubleshooting: 'https://trailmark.app/troubleshooting',
 } as const;
 
 export default function SettingsScreen() {
   const { open } = useLocalSearchParams<{ open?: string }>();
   const [nodConnected, setNodConnected] = useState(isNodConnected());
   const [nodManageOpen, setNodManageOpen] = useState(() => open === 'nod');
+  const [storyStorageOpen, setStoryStorageOpen] = useState(false);
   const [nodTested, setNodTested] = useState(false);
   const [liveMapStyle, setLiveMapStyleState] = useState<LiveMapStyle>(getLiveMapStyle());
   const [replayPace, setReplayPaceState] = useState<ReplayPace>(getReplayPace());
@@ -58,12 +62,12 @@ export default function SettingsScreen() {
 
       <Section label="YOUR STORIES">
         <SettingsRow icon="square.stack" androidIcon="collections_bookmark" title="Archive" detail="Saved walks stay on this device" action="Open" onPress={() => router.replace('/(tabs)/archive')} />
-        <SettingsRow icon="internaldrive" androidIcon="storage" title="Story storage" detail="Stories are saved locally on this device" />
+        <SettingsRow icon="internaldrive" androidIcon="storage" title="Story storage" detail="Stories are saved locally on this device" action="Manage" onPress={() => setStoryStorageOpen(true)} />
       </Section>
 
       <Section label="HELP">
-        <SettingsRow icon="hand.tap" androidIcon="touch_app" title="How Nod works" detail="Press once when something catches your attention" action="Read" onPress={() => setNodManageOpen(true)} />
-        <SettingsRow icon="questionmark.circle" androidIcon="help_outline" title="Troubleshooting" detail="Connection and marking help" action="Read" />
+        <SettingsRow icon="hand.tap" androidIcon="touch_app" title="How Nod works" detail="Press once when something catches your attention" action="Read" onPress={() => { void WebBrowser.openBrowserAsync(legalLinks.help); }} />
+        <SettingsRow icon="questionmark.circle" androidIcon="help_outline" title="Troubleshooting" detail="Connection and marking help" action="Read" onPress={() => { void WebBrowser.openBrowserAsync(legalLinks.troubleshooting); }} />
       </Section>
 
       <Section label="LEGAL">
@@ -76,6 +80,7 @@ export default function SettingsScreen() {
       </Section>
     </ScrollView>
     <NodManagementSheet visible={nodManageOpen} connected={nodConnected} tested={nodTested} onTest={() => setNodTested(true)} onClose={() => setNodManageOpen(false)} />
+    <StoryStorageSheet key={storyStorageOpen ? 'open' : 'closed'} visible={storyStorageOpen} onClose={() => setStoryStorageOpen(false)} />
   </SafeAreaView>;
 }
 
@@ -98,10 +103,36 @@ function NodManagementSheet({ visible, connected, tested, onTest, onClose }: { v
         <View style={styles.sheetHandle} />
         <View style={styles.sheetHeader}><View style={styles.sheetIcon}><SymbolView name={{ ios: 'dot.radiowaves.left.and.right' as never, android: 'bluetooth' as never, web: 'bluetooth' as never }} size={18} weight="medium" tintColor={palette.accent} /></View><View style={styles.sheetCopy}><Text style={styles.sheetTitle}>Manage Nod</Text><Text style={styles.sheetDetail}>{connected ? 'Connected and ready for your next walk.' : 'Nod is not connected.'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close Nod management" onPress={onClose} style={styles.sheetClose}><Text style={styles.sheetCloseText}>×</Text></Pressable></View>
         {connected ? <>
-          <View style={styles.deviceStatus}><View><Text style={styles.deviceStatusLabel}>Nod status</Text><Text style={styles.deviceStatusValue}>Connected · 87% battery</Text></View><Text style={styles.deviceStatusMeta}>Synced just now</Text></View>
+          <View style={styles.deviceStatus}><View><Text style={styles.deviceStatusLabel}>Nod status</Text><Text style={styles.deviceStatusValue}>Connected · {getNodStatus().batteryPercent}% battery</Text></View><Text style={styles.deviceStatusMeta}>{getNodStatus().lastSyncLabel}</Text></View>
           <Pressable accessibilityRole="button" onPress={onTest} style={({ pressed }) => [styles.sheetPrimary, pressed && styles.pressed]}><Text style={styles.sheetPrimaryText}>{tested ? 'That came through.' : 'Test Nod'}</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/pair-nod', params: { returnTo: 'settings' } }); }} style={({ pressed }) => [styles.sheetSecondary, pressed && styles.pressed]}><Text style={styles.sheetSecondaryText}>Reconnect Nod</Text></Pressable>
         </> : <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/pair-nod', params: { returnTo: 'settings' } }); }} style={({ pressed }) => [styles.sheetPrimary, pressed && styles.pressed]}><Text style={styles.sheetPrimaryText}>Set up Nod</Text></Pressable>}
+      </Animated.View>
+    </View>
+  </Modal>;
+}
+
+function StoryStorageSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const [sheetProgress] = useState(() => new Animated.Value(0));
+  const [confirming, setConfirming] = useState(false);
+  const [purged, setPurged] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    sheetProgress.setValue(0);
+    const animation = Animated.timing(sheetProgress, { toValue: 1, duration: 280, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
+  }, [sheetProgress, visible]);
+
+  return <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <View style={styles.sheetOverlay}>
+      <Animated.View pointerEvents="none" style={[styles.sheetBackdrop, { opacity: sheetProgress }]} />
+      <Pressable accessibilityLabel="Close story storage" onPress={onClose} style={styles.sheetDismiss} />
+      <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetProgress.interpolate({ inputRange: [0, 1], outputRange: [360, 0] }) }] }] }>
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetHeader}><View style={styles.sheetIcon}><SymbolView name={{ ios: 'internaldrive' as never, android: 'storage' as never, web: 'storage' as never }} size={18} weight="medium" tintColor={palette.accent} /></View><View style={styles.sheetCopy}><Text style={styles.sheetTitle}>Story storage</Text><Text style={styles.sheetDetail}>Your trail stories are saved on this device.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close story storage" onPress={onClose} style={styles.sheetClose}><Text style={styles.sheetCloseText}>×</Text></Pressable></View>
+        {purged ? <><View style={styles.storageDemoState}><Text style={styles.storageDemoTitle}>Demo only</Text><Text style={styles.storageDemoText}>Nothing was deleted. This action is not wired yet.</Text></View><Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.sheetPrimary, pressed && styles.pressed]}><Text style={styles.sheetPrimaryText}>Done</Text></Pressable></> : confirming ? <><View style={styles.storageWarning}><Text style={styles.storageWarningTitle}>Purge all stories?</Text><Text style={styles.storageWarningText}>This would remove saved walks and reflections from this device.</Text></View><Pressable accessibilityRole="button" onPress={() => setPurged(true)} style={({ pressed }) => [styles.sheetDestructive, pressed && styles.pressed]}><Text style={styles.sheetDestructiveText}>Purge stories</Text></Pressable><Pressable accessibilityRole="button" onPress={() => setConfirming(false)} style={({ pressed }) => [styles.sheetSecondary, pressed && styles.pressed]}><Text style={styles.sheetSecondaryText}>Cancel</Text></Pressable></> : <><View style={styles.storageSummary}><Text style={styles.storageSummaryTitle}>Saved locally</Text><Text style={styles.storageSummaryText}>Your Archive stays available without an account or connection.</Text></View><Pressable accessibilityRole="button" onPress={() => setConfirming(true)} style={({ pressed }) => [styles.sheetDestructive, pressed && styles.pressed]}><Text style={styles.sheetDestructiveText}>Clear story storage</Text></Pressable></>}
       </Animated.View>
     </View>
   </Modal>;
@@ -170,4 +201,15 @@ const styles = StyleSheet.create({
   sheetNote: { color: palette.secondary, fontSize: 14, lineHeight: 20, marginTop: 14 },
   sheetSecondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   sheetSecondaryText: { color: palette.secondary, fontSize: 15, fontWeight: '700' },
+  sheetDestructive: { minHeight: 54, alignItems: 'center', justifyContent: 'center', marginTop: 13, borderRadius: 17, backgroundColor: '#F6E7E4' },
+  sheetDestructiveText: { color: '#B84D43', fontSize: 16, fontWeight: '800' },
+  storageSummary: { marginTop: 22, padding: 15, borderRadius: 16, backgroundColor: '#E7F0E8' },
+  storageSummaryTitle: { color: palette.text, fontSize: 15, fontWeight: '800' },
+  storageSummaryText: { color: palette.secondary, fontSize: 13, lineHeight: 19, marginTop: 4 },
+  storageWarning: { marginTop: 22, padding: 15, borderRadius: 16, backgroundColor: '#F6E7E4' },
+  storageWarningTitle: { color: '#7B302B', fontSize: 15, fontWeight: '800' },
+  storageWarningText: { color: '#8F5A54', fontSize: 13, lineHeight: 19, marginTop: 4 },
+  storageDemoState: { marginTop: 22, padding: 15, borderRadius: 16, backgroundColor: '#E7F0E8' },
+  storageDemoTitle: { color: palette.accent, fontSize: 15, fontWeight: '800' },
+  storageDemoText: { color: palette.secondary, fontSize: 13, lineHeight: 19, marginTop: 4 },
 });
