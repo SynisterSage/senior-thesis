@@ -12,10 +12,14 @@ export default function RootLayout() {
       contentStyle: { backgroundColor: palette.background },
     }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="pair-nod" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="trail-preview" options={{ headerShown: false }} />
       <Stack.Screen name="hike" options={{ headerShown: false }} />
+      <Stack.Screen name="return" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="reflect" options={{ title: 'Reflect', gestureEnabled: false }} />
-      <Stack.Screen name="recap" options={{ title: 'Hike recap', gestureEnabled: false }} />
+      <Stack.Screen name="recap" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen name="moment" options={{ title: 'Moment' }} />
     </Stack>
   );

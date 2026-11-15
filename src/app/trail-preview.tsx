@@ -199,6 +199,7 @@ export default function TrailPreviewScreen() {
               </View>
               {(trail?.landmarks ?? []).map((landmark, index) => <LandmarkRow key={landmark.title} index={index + 1} title={landmark.title} note={landmark.note} />)}
             </View>
+
           </View>
           </ScrollView>
         </View>
