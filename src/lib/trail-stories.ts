@@ -20,6 +20,7 @@ export type SavedTrailStory = {
   notes: string[];
   marks?: CapturedTrailMoment[];
   routeCoordinates?: number[][];
+  noticingFocus?: string;
 };
 
 type NewTrailStory = Omit<SavedTrailStory, 'id' | 'createdAt'>;
@@ -31,6 +32,7 @@ export type ActiveHikeDraft = {
   routeCoordinates: number[][];
   marks: CapturedTrailMoment[];
   notes: string[];
+  noticingFocus?: string;
   updatedAt: string;
 };
 

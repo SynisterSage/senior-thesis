@@ -5,12 +5,12 @@ import Mapbox from '@rnmapbox/maps';
 import { Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors } from '@/constants/trailmark-theme';
-import { grandPrismaticMoments } from '@/lib/trail-moments';
+import { getNoticingPrompt, grandPrismaticMoments } from '@/lib/trail-moments';
 
 const palette = colors.light;
 
 export default function ReflectScreen() {
-  const { markedCount, momentIds: momentIdsParam, coordinates: coordinatesParam } = useLocalSearchParams<{ markedCount?: string; momentIds?: string; coordinates?: string }>();
+  const { markedCount, momentIds: momentIdsParam, coordinates: coordinatesParam, focus } = useLocalSearchParams<{ markedCount?: string; momentIds?: string; coordinates?: string; focus?: string }>();
   const cameraRef = useRef<Mapbox.Camera>(null);
   const coordinates = useMemo<number[][]>(() => {
     try { const parsed = JSON.parse(coordinatesParam ?? '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
@@ -31,6 +31,7 @@ export default function ReflectScreen() {
   const [stateAnimation] = useState(() => new Animated.Value(0));
   const complete = total === 0 || currentIndex >= total;
   const currentMoment = grandPrismaticMoments.find((moment) => moment.id === momentIds[currentIndex]) ?? grandPrismaticMoments[currentIndex % grandPrismaticMoments.length];
+  const noticingFocus = focus?.trim() ?? '';
 
   const revealMoment = () => {
     setNotes((currentNotes) => [...currentNotes, note.trim()]);
@@ -70,7 +71,7 @@ export default function ReflectScreen() {
         <View style={styles.completeMark}><Text style={styles.completeCheck}>✓</Text></View>
         <Text accessibilityRole="header" style={styles.completeTitle}>{total ? 'That is the walk, for now.' : 'This walk is still worth keeping.'}</Text>
         <Text style={styles.completeText}>{total ? 'Your memories are ready to become a trail story.' : 'Return to the trail when something feels worth holding onto.'}</Text>
-        <ActionButton label="Build my trail story" onPress={() => router.replace({ pathname: '/recap', params: { markedCount: String(total), notes: JSON.stringify(notes), momentIds: JSON.stringify(momentIds) } })} />
+        <ActionButton label="Build my trail story" onPress={() => router.replace({ pathname: '/recap', params: { markedCount: String(total), notes: JSON.stringify(notes), momentIds: JSON.stringify(momentIds), focus: noticingFocus } })} />
       </ReflectShell>
     );
   }
@@ -88,9 +89,10 @@ export default function ReflectScreen() {
         <>
           <Text accessibilityRole="header" style={styles.title}>What do you remember?</Text>
           <Text style={styles.description}>Before TrailMark shows you where this happened, leave yourself a small note about what stayed with you.</Text>
+          {noticingFocus ? <View style={styles.focusPill}><Text style={styles.focusLabel}>Your noticing lens</Text><Text style={styles.focusText}>{noticingFocus}</Text></View> : null}
           <View style={styles.promptCard}>
             <View style={styles.promptDot} />
-            <Text style={styles.prompt}>{currentMoment.prompt}</Text>
+          <Text style={styles.prompt}>{getNoticingPrompt(currentMoment, noticingFocus)}</Text>
           </View>
           <View style={styles.inputCard}>
             <Text style={styles.inputLabel}>Your memory</Text>
@@ -168,6 +170,9 @@ const styles = StyleSheet.create({
   progressMarkActive: { backgroundColor: palette.accent },
   title: { color: palette.text, fontSize: 35, lineHeight: 40, fontWeight: '800', letterSpacing: -0.9, marginTop: 43 },
   description: { color: palette.secondary, fontSize: 16, lineHeight: 24, marginTop: 10 },
+  focusPill: { padding: 14, marginTop: 18, borderRadius: 16, backgroundColor: '#EAF2EB' },
+  focusLabel: { color: palette.accent, fontSize: 12, fontWeight: '800' },
+  focusText: { color: palette.text, fontSize: 15, lineHeight: 21, fontWeight: '700', marginTop: 4 },
   promptCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 11, padding: 16, marginTop: 28, borderRadius: 18, backgroundColor: '#EAF2EB' },
   promptDot: { width: 12, height: 12, marginTop: 5, borderRadius: 6, backgroundColor: '#B8DCC0', borderWidth: 3, borderColor: palette.accent },
   prompt: { flex: 1, color: palette.text, fontSize: 16, lineHeight: 23, fontWeight: '700' },

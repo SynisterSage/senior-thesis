@@ -55,7 +55,7 @@ export default function TrailPreviewScreen() {
 
   const startTrip = () => router.push({
     pathname: '/hike',
-    params: { slug: trail?.slug ?? slug ?? 'grand-prismatic-overlook' },
+    params: { slug: trail?.slug ?? slug ?? 'grand-prismatic-overlook', notice: customNotice.trim() },
   });
 
   return (

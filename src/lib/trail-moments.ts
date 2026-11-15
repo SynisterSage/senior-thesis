@@ -62,3 +62,43 @@ export const grandPrismaticMoments: PreparedTrailMoment[] = [
     routeEnd: true,
   },
 ];
+
+const noticingPrompts: Record<string, string[]> = {
+  sound: [
+    'What sound stayed with you first?',
+    'How did the river change the sound of the trail?',
+    'What became louder or quieter as you climbed?',
+    'What did you hear beneath the view?',
+  ],
+  light: [
+    'Where did the light first catch your attention?',
+    'How did the light move across the trail?',
+    'What changed as the view opened up?',
+    'What color or glow pulled you in?',
+  ],
+  water: [
+    'What did the water make you notice first?',
+    'How did being near the river change the walk?',
+    'What movement did you notice in the water or landscape?',
+    'What stayed with you about the spring?',
+  ],
+  movement: [
+    'What movement caught your attention first?',
+    'How did the trail move around the river?',
+    'What changed as your body climbed?',
+    'What movement made the view feel alive?',
+  ],
+  change: [
+    'What changed as you began the walk?',
+    'What shifted when the river came alongside you?',
+    'What changed as the trail climbed?',
+    'What changed when the view opened up?',
+  ],
+};
+
+export function getNoticingPrompt(moment: PreparedTrailMoment, focus?: string) {
+  const normalized = focus?.toLowerCase() ?? '';
+  const match = Object.keys(noticingPrompts).find((keyword) => normalized.includes(keyword));
+  if (!match) return moment.prompt;
+  return noticingPrompts[match][grandPrismaticMoments.findIndex((candidate) => candidate.id === moment.id)] ?? moment.prompt;
+}

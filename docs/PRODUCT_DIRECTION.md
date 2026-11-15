@@ -33,6 +33,8 @@ The prototype should make these claims honestly:
 - The phone supplies location; Nod is not a standalone GPS or navigation device.
 - Prepared trail content and Wizard-of-Oz states are labeled separately from working hardware behavior.
 
+See [Nod interaction language](./NOD_INTERACTION_LANGUAGE.md) for the physical cue patterns and their matching UI behavior.
+
 ## What is already represented in the prototype
 
 - A focused hike map for Grand Prismatic Overlook.

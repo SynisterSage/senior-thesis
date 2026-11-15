@@ -11,7 +11,7 @@ import type { Feature, LineString, Position } from 'geojson';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getPublishedTrail } from '@/lib/trails';
-import { grandPrismaticMoments } from '@/lib/trail-moments';
+import { getNoticingPrompt, grandPrismaticMoments } from '@/lib/trail-moments';
 import { clearActiveHikeDraft, getActiveHikeDraft, saveActiveHikeDraft, type CapturedTrailMoment } from '@/lib/trail-stories';
 
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
@@ -155,7 +155,7 @@ function isNearbyFeature(anchor: TrailAnchor): anchor is NearbyFeature {
 if (mapboxToken) Mapbox.setAccessToken(mapboxToken);
 
 export default function HikeScreen() {
-  const { slug } = useLocalSearchParams<{ slug?: string }>();
+  const { slug, notice } = useLocalSearchParams<{ slug?: string; notice?: string }>();
   const storedDraft = getActiveHikeDraft();
   const matchingDraft = storedDraft?.slug === (slug ?? 'grand-prismatic-overlook') ? storedDraft : undefined;
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -171,6 +171,7 @@ export default function HikeScreen() {
   const [routeDrawProgress, setRouteDrawProgress] = useState(0);
   const [zoomLevel, setZoomLevel] = useState(14.5);
   const [trailName, setTrailName] = useState('Grand Prismatic Overlook');
+  const [noticingFocus] = useState(() => matchingDraft?.noticingFocus ?? notice?.trim() ?? '');
   const [markedMoments, setMarkedMoments] = useState<CapturedTrailMoment[]>(() => matchingDraft?.marks ?? []);
   const [latestMarkId, setLatestMarkId] = useState<string | null>(() => matchingDraft?.marks[matchingDraft.marks.length - 1]?.id ?? null);
   const [lastMarkedTitle, setLastMarkedTitle] = useState<string | null>(null);
@@ -304,6 +305,7 @@ export default function HikeScreen() {
     routeCoordinates,
     marks,
     notes,
+    noticingFocus,
   });
   const markMoment = (source: MarkSource) => {
     if (demoComplete || markingRef.current) return;
@@ -453,7 +455,7 @@ export default function HikeScreen() {
       setStoryRevealed(false);
       setStorySheetOpen(false);
       cameraRef.current?.setCamera({ centerCoordinate: routeCenter, zoomLevel: 13.2, pitch: 0, heading: 0, animationDuration: 450, animationMode: 'easeTo' });
-      router.push({ pathname: '/recap', params: { markedCount: String(markedMoments.length), notes: JSON.stringify(storyNotes), momentIds: JSON.stringify(markedMoments.map((moment) => moment.momentId)), marks: JSON.stringify(markedMoments), routeCoordinates: JSON.stringify(routeCoordinates) } });
+      router.push({ pathname: '/recap', params: { markedCount: String(markedMoments.length), notes: JSON.stringify(storyNotes), momentIds: JSON.stringify(markedMoments.map((moment) => moment.momentId)), marks: JSON.stringify(markedMoments), routeCoordinates: JSON.stringify(routeCoordinates), focus: noticingFocus } });
       return;
     }
     setStoryIndex(next);
@@ -649,7 +651,7 @@ export default function HikeScreen() {
             <View style={styles.chapterProgressTrack}>{markedMoments.map((moment, index) => <View key={moment.id} style={[styles.chapterProgressStep, index <= storyIndex && styles.chapterProgressStepActive]} />)}</View>
             {!storyRevealed ? <>
               <Text style={styles.chapterTitle}>What do you remember?</Text>
-              <Text style={styles.chapterPrompt}>{activeStoryMoment?.prompt}</Text>
+              <Text style={styles.chapterPrompt}>{activeStoryMoment ? getNoticingPrompt(activeStoryMoment, noticingFocus) : null}</Text>
               <TextInput accessibilityLabel="Write what you remember" multiline value={storyNote} onChangeText={setStoryNote} placeholder="A sound, a view, a feeling, something small..." placeholderTextColor="#75857C" style={styles.chapterInput} />
               <Pressable accessibilityRole="button" onPress={() => revealStoryMoment()} style={styles.chapterButton}><Text style={styles.chapterButtonText}>Reveal this moment →</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => { setStoryNote(''); revealStoryMoment(''); }} style={styles.chapterSkip}><Text style={styles.chapterSkipText}>I’ll come back to this</Text></Pressable>
