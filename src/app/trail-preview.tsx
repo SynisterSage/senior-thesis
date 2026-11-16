@@ -54,6 +54,8 @@ export default function TrailPreviewScreen() {
   const { slug, focusId, notice } = useLocalSearchParams<{ slug?: string; focusId?: string; notice?: string }>();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const photoTourScrollRef = useRef<ScrollViewInstance>(null);
+  const previewCameraRef = useRef<Mapbox.Camera>(null);
+  const hasPlayedMapIntro = useRef(false);
   const suggestion = getTrailNoticingSuggestion(slug);
   const selectedFocus = getNoticingFocus(focusId);
   const [trail, setTrail] = useState<Trail | null>(null);
@@ -65,11 +67,26 @@ export default function TrailPreviewScreen() {
   const [photoTourIndex, setPhotoTourIndex] = useState(0);
   const nodConnected = isNodConnected();
   const suggestionStatus = selectedFocus ? 'Your lens' : !customNotice.trim() ? 'Optional' : customNotice.trim() === suggestion?.focus ? 'For this trail' : 'Your detail';
+  const routeCoordinates = useMemo(() => outboundRouteCoordinates(trail?.route_geojson?.geometry.coordinates ?? []), [trail]);
 
   useEffect(() => {
     if (!slug) return;
     void getPublishedTrail(slug).then(setTrail);
   }, [slug]);
+
+  useEffect(() => {
+    if (!trail?.route_geojson || hasPlayedMapIntro.current) return;
+    hasPlayedMapIntro.current = true;
+    const timer = setTimeout(() => {
+      previewCameraRef.current?.setCamera({
+        centerCoordinate: [-110.836, 44.520],
+        zoomLevel: 11.5,
+        animationDuration: 900,
+        animationMode: 'flyTo',
+      });
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [trail]);
 
   const distance = useMemo(() => {
     if (!trail?.distance_m) return '—';
@@ -170,9 +187,8 @@ export default function TrailPreviewScreen() {
               <View style={styles.mapFrame}>
                 <Mapbox.MapView style={styles.map} styleURL={Mapbox.StyleURL.Outdoors} logoEnabled={false} attributionEnabled={false} scaleBarEnabled={false} scrollEnabled zoomEnabled rotateEnabled={false} pitchEnabled={false}>
                   <Mapbox.Camera
-                    defaultSettings={{ centerCoordinate: [-110.836, 44.520], zoomLevel: 11.5 }}
-                    centerCoordinate={[-110.836, 44.520]}
-                    zoomLevel={13.8}
+                    ref={previewCameraRef}
+                    defaultSettings={{ centerCoordinate: [-110.840, 44.517], zoomLevel: 10.9 }}
                     animationMode="flyTo"
                     animationDuration={1100}
                   />
@@ -181,10 +197,10 @@ export default function TrailPreviewScreen() {
                       <Mapbox.ShapeSource id="preview-route" shape={trail.route_geojson}>
                         <Mapbox.LineLayer id="preview-route-line" style={{ lineColor: palette.accent, lineWidth: 4, lineCap: 'round', lineJoin: 'round' }} />
                       </Mapbox.ShapeSource>
-                      <Mapbox.PointAnnotation id="trail-start-point" coordinate={trail.route_geojson.geometry.coordinates[0]}>
+                      <Mapbox.PointAnnotation id="trail-start-point" coordinate={routeCoordinates[0]}>
                         <View style={styles.routePointStart} />
                       </Mapbox.PointAnnotation>
-                      <Mapbox.PointAnnotation id="trail-end-point" coordinate={trail.route_geojson.geometry.coordinates[trail.route_geojson.geometry.coordinates.length - 1]}>
+                      <Mapbox.PointAnnotation id="trail-end-point" coordinate={routeCoordinates[routeCoordinates.length - 1]}>
                         <View style={styles.routePointEnd} />
                       </Mapbox.PointAnnotation>
                     </>
@@ -346,6 +362,26 @@ function LandmarkRow({ index, title, note, accent, soft }: { index: number; titl
   return <View style={styles.landmarkRow}><View style={[styles.landmarkNumber, { backgroundColor: soft }]}><Text style={[styles.landmarkNumberText, { color: accent }]}>{index}</Text></View><View style={styles.landmarkCopy}><Text style={styles.landmarkTitle}>{title}</Text><Text style={styles.landmarkNote}>{note}</Text></View></View>;
 }
 
+function outboundRouteCoordinates(coordinates: number[][]): number[][] {
+  if (coordinates.length < 2) return coordinates;
+
+  const start = coordinates[0];
+  let turnaroundIndex = coordinates.length - 1;
+  let farthestDistance = -1;
+
+  coordinates.forEach((coordinate, index) => {
+    const longitudeDelta = coordinate[0] - start[0];
+    const latitudeDelta = coordinate[1] - start[1];
+    const distanceFromStart = longitudeDelta * longitudeDelta + latitudeDelta * latitudeDelta;
+    if (distanceFromStart > farthestDistance) {
+      farthestDistance = distanceFromStart;
+      turnaroundIndex = index;
+    }
+  });
+
+  return coordinates.slice(0, turnaroundIndex + 1);
+}
+
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: palette.background },
   screenContent: { flex: 1 },
@@ -377,8 +413,8 @@ const styles = StyleSheet.create({
   cardTitle: { color: palette.text, fontSize: 13, fontWeight: '700' },
   mapFrame: { flex: 1, minHeight: 175, overflow: 'hidden', borderRadius: 16, backgroundColor: '#DCE5DC' },
   map: { ...StyleSheet.absoluteFill },
-  routePointStart: { width: 16, height: 16, borderRadius: 8, backgroundColor: palette.accent, borderWidth: 3, borderColor: '#FFFFFF' },
-  routePointEnd: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#E99A55', borderWidth: 3, borderColor: '#FFFFFF' },
+  routePointStart: { width: 15, height: 15, borderRadius: 8, backgroundColor: '#72D48B', borderWidth: 3, borderColor: '#FFFFFF' },
+  routePointEnd: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#F07455', borderWidth: 4, borderColor: '#FFFFFF', shadowColor: '#8E301D', shadowOpacity: 0.28, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
   mediaRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
   mediaTile: { flex: 1, height: 126, overflow: 'hidden', borderRadius: 18, backgroundColor: '#DCE5DC' },
   nodTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F4EF' },

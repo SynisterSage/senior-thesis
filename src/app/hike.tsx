@@ -35,6 +35,11 @@ type NearbyFeature = TrailAnchor & {
   coordinate: Position;
 };
 
+type NoticeCueStatus = 'ready' | 'delivered' | 'ignored';
+type MarkNoticeKind = 'mark' | 'cue';
+
+const noticeCueMomentId = 'grand-prismatic-overlook';
+
 const excelsiorImage = require('../../assets/trails/grand-prismatic/excelsior.jpg');
 const midwayImage = require('../../assets/trails/grand-prismatic/midway.jpg');
 const gooseLakeImage = require('../../assets/trails/grand-prismatic/goose-lake-context.jpg');
@@ -165,6 +170,8 @@ export default function HikeScreen() {
   const storyCameraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const arrivalCameraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeDrawDelay = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeCueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeDrawFrame = useRef<number | null>(null);
   const hasPlayedArrivalCamera = useRef(false);
   const hasPlayedRouteDraw = useRef(false);
@@ -180,6 +187,9 @@ export default function HikeScreen() {
   const [markedMoments, setMarkedMoments] = useState<CapturedTrailMoment[]>(() => matchingDraft?.marks ?? []);
   const [latestMarkId, setLatestMarkId] = useState<string | null>(() => matchingDraft?.marks[matchingDraft.marks.length - 1]?.id ?? null);
   const [lastMarkedTitle, setLastMarkedTitle] = useState<string | null>(null);
+  const [lastMarkMessage, setLastMarkMessage] = useState<string | null>(null);
+  const [markNoticeTitle, setMarkNoticeTitle] = useState<string | null>(null);
+  const [markNoticeKind, setMarkNoticeKind] = useState<MarkNoticeKind>('mark');
   const [showMarkNotice, setShowMarkNotice] = useState(false);
   const [nodSheetOpen, setNodSheetOpen] = useState(false);
   const [markNoticeOpacity] = useState(() => new Animated.Value(1));
@@ -193,6 +203,7 @@ export default function HikeScreen() {
   const [actionsOpacity] = useState(() => new Animated.Value(1));
   const [actionsOffset] = useState(() => new Animated.Value(0));
   const [showGuidance, setShowGuidance] = useState(true);
+  const [noticeCueStatus, setNoticeCueStatus] = useState<NoticeCueStatus>('ready');
   const [storyIntro, setStoryIntro] = useState(false);
   const [storyStyleLoaded, setStoryStyleLoaded] = useState(true);
   const [storyIndex, setStoryIndex] = useState<number | null>(null);
@@ -217,6 +228,8 @@ export default function HikeScreen() {
     if (storyCameraTimer.current) clearTimeout(storyCameraTimer.current);
     if (arrivalCameraTimer.current) clearTimeout(arrivalCameraTimer.current);
     if (routeDrawDelay.current) clearTimeout(routeDrawDelay.current);
+    if (markNoticeTimer.current) clearTimeout(markNoticeTimer.current);
+    if (noticeCueTimer.current) clearTimeout(noticeCueTimer.current);
     if (routeDrawFrame.current) cancelAnimationFrame(routeDrawFrame.current);
   }, []);
 
@@ -327,14 +340,42 @@ export default function HikeScreen() {
     noticingFocusId,
     noticingFocus,
   });
+  const presentMarkNotice = (message: string, title: string | null = null, kind: MarkNoticeKind = 'mark', afterFade?: () => void) => {
+    if (markNoticeTimer.current) clearTimeout(markNoticeTimer.current);
+    setMarkNoticeTitle(title);
+    setMarkNoticeKind(kind);
+    setLastMarkMessage(message);
+    markNoticeOpacity.stopAnimation();
+    markNoticeOffset.stopAnimation();
+    markNoticeOpacity.setValue(1);
+    markNoticeOffset.setValue(0);
+    setShowMarkNotice(true);
+    markNoticeTimer.current = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(markNoticeOpacity, { toValue: 0, duration: 220, useNativeDriver: true }),
+        Animated.timing(markNoticeOffset, { toValue: 12, duration: 220, useNativeDriver: true }),
+      ]).start(() => {
+        setShowMarkNotice(false);
+        markNoticeTimer.current = null;
+        afterFade?.();
+      });
+    }, 2200);
+  };
   const markMoment = (source: MarkSource) => {
     if (demoComplete || markingRef.current) return;
     markingRef.current = true;
-    const nextIndex = markedMoments.length;
-    const preparedMoment = grandPrismaticMoments[nextIndex];
+    const nextUnkeptMoment = grandPrismaticMoments.find((candidate) => !markedMoments.some((marked) => marked.momentId === candidate.id));
+    const preparedMoment = noticeCueStatus === 'delivered'
+      ? grandPrismaticMoments.find((moment) => moment.id === noticeCueMomentId && !markedMoments.some((marked) => marked.momentId === moment.id)) ?? nextUnkeptMoment
+      : nextUnkeptMoment;
+    if (!preparedMoment) {
+      markingRef.current = false;
+      return;
+    }
     const coordinate = preparedMoment.routeEnd ? (routeCoordinates[routeCoordinates.length - 1] ?? fallbackMarkCoordinate) : coordinateAtFraction(routeCoordinates, preparedMoment.routeFraction);
     const moment: CapturedTrailMoment = { id: `moment-${markSequenceRef.current++}`, momentId: preparedMoment.id, coordinate, source, createdAt: new Date().toISOString() };
     const nextMoments = [...markedMoments, moment];
+    const sendsNoticeCue = source === 'nod' && nextMoments.length === 3 && noticeCueStatus === 'ready';
     setMarkedMoments(nextMoments);
     persistDraft(nextMoments, storyNotes);
     setLatestMarkId(moment.id);
@@ -344,7 +385,7 @@ export default function HikeScreen() {
         centerCoordinate: coordinate,
         zoomLevel: 15.15,
         pitch: 28,
-        heading: 18 + nextIndex * 8,
+        heading: 18 + markedMoments.length * 8,
         padding: storyCameraPadding,
         animationDuration: 950,
         animationMode: 'flyTo',
@@ -357,25 +398,27 @@ export default function HikeScreen() {
       Animated.timing(markBloomOpacity, { toValue: 0, duration: 520, useNativeDriver: true }),
     ]).start();
     setLastMarkedTitle(preparedMoment.title);
-    setShowMarkNotice(true);
+    if (sendsNoticeCue) {
+      setNoticeCueStatus('delivered');
+      if (noticeCueTimer.current) clearTimeout(noticeCueTimer.current);
+      presentMarkNotice(preparedMoment.title, null, 'mark', () => {
+        noticeCueTimer.current = setTimeout(() => {
+          presentMarkNotice('Stay with what changes next.', 'A quiet cue from Nod', 'cue');
+          noticeCueTimer.current = null;
+        }, 180);
+      });
+    } else {
+      if (noticeCueTimer.current) clearTimeout(noticeCueTimer.current);
+      presentMarkNotice(preparedMoment.title);
+    }
+    if (noticeCueStatus === 'delivered' && !sendsNoticeCue) {
+      setNoticeCueStatus('ignored');
+    }
     dismissGuidance();
     setTimeout(() => {
       markingRef.current = false;
     }, 350);
   };
-
-  useEffect(() => {
-    if (!showMarkNotice) return;
-    markNoticeOpacity.setValue(1);
-    markNoticeOffset.setValue(0);
-    const timeout = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(markNoticeOpacity, { toValue: 0, duration: 220, useNativeDriver: true }),
-        Animated.timing(markNoticeOffset, { toValue: 12, duration: 220, useNativeDriver: true }),
-      ]).start(() => setShowMarkNotice(false));
-    }, 2200);
-    return () => clearTimeout(timeout);
-  }, [markNoticeOffset, markNoticeOpacity, showMarkNotice]);
 
   const centerRoute = () => {
     setZoomLevel(14.5);
@@ -416,6 +459,7 @@ export default function HikeScreen() {
   const finishHike = () => {
     void stopHikeBackgroundTracking();
     if (storyCameraTimer.current) clearTimeout(storyCameraTimer.current);
+    if (noticeCueTimer.current) clearTimeout(noticeCueTimer.current);
     setStoryStyleLoaded(false);
     setStoryIntro(true);
     dismissGuidance();
@@ -704,7 +748,7 @@ export default function HikeScreen() {
                 </View>
               </Animated.View>
             ) : null}
-            {showMarkNotice ? <Animated.View style={[styles.markNotice, { opacity: markNoticeOpacity, transform: [{ translateY: markNoticeOffset }] }]}><View style={styles.markNoticeIcon}><TrailSymbol name="checkmark" androidName="check" size={15} color="#FFFFFF" /></View><View style={styles.statusCopy}><Text style={styles.statusTitle}>{nodConnected ? 'Nod marked' : 'Moment marked'}</Text><Text style={styles.statusText}>{lastMarkedTitle ?? 'You can make sense of it after the hike.'}</Text></View></Animated.View> : null}
+            {showMarkNotice ? <Animated.View style={[styles.markNotice, markNoticeKind === 'cue' && styles.markNoticeCue, { opacity: markNoticeOpacity, transform: [{ translateY: markNoticeOffset }] }]}><View style={[styles.markNoticeIcon, markNoticeKind === 'cue' && styles.markNoticeCueIcon]}><TrailSymbol name="checkmark" androidName="check" size={15} color={markNoticeKind === 'cue' ? '#314632' : '#FFFFFF'} /></View><View style={styles.statusCopy}><Text style={[styles.statusTitle, markNoticeKind === 'cue' && styles.markNoticeCueTitle]}>{markNoticeTitle ?? (nodConnected ? 'Nod marked' : 'Moment marked')}</Text><Text style={styles.statusText}>{lastMarkMessage ?? lastMarkedTitle ?? 'You can make sense of it after the hike.'}</Text></View></Animated.View> : null}
           </Animated.View>
           <Animated.View pointerEvents={selectedAnchor ? 'none' : 'auto'} style={[styles.actions, { opacity: actionsOpacity, transform: [{ translateY: actionsOffset }] }]}>
             <Pressable accessibilityRole="button" accessibilityLabel={demoComplete ? 'All demo moments captured' : nodConnected ? 'Mark with Nod' : 'Mark a moment'} disabled={demoComplete} onPress={() => markMoment(nodConnected ? 'nod' : 'phone')} style={({ pressed }) => [styles.markButton, demoComplete && styles.markButtonComplete, pressed && styles.pressed]}>
@@ -951,10 +995,13 @@ const styles = StyleSheet.create({
   bottomFeedback: { gap: 10 },
   statusCard: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13, borderRadius: 18, backgroundColor: 'rgba(19, 39, 29, 0.94)', borderWidth: 1, borderColor: '#345640' },
   markNotice: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13, borderRadius: 18, backgroundColor: 'rgba(19, 39, 29, 0.96)', borderWidth: 1, borderColor: '#4D8A61' },
+  markNoticeCue: { backgroundColor: 'rgba(75, 82, 47, 0.97)', borderColor: '#C6C987' },
   statusIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#24794C' },
   markNoticeIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#3F9B59' },
+  markNoticeCueIcon: { backgroundColor: '#C6C987' },
   statusCopy: { flex: 1, gap: 2 },
   statusTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  markNoticeCueTitle: { color: '#FFFBE4' },
   statusText: { color: '#B9D2C0', fontSize: 12, lineHeight: 17 },
   actions: { flexDirection: 'row', gap: 10 },
   markButton: { flex: 1, minHeight: 56, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#A8DFB6' },

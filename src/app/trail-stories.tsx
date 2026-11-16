@@ -79,10 +79,10 @@ export default function TrailStoriesScreen() {
   const [selectedEcho, setSelectedEcho] = useState<PositionedEcho | null>(null);
   const [zoomLevel, setZoomLevel] = useState(overviewZoom);
   const trailName = trail?.name?.replace(/ Trail$/, '') ?? 'Grand Prismatic Overlook';
+  const routeCoordinates = useMemo(() => outboundRouteCoordinates(trail?.route_geojson?.geometry.coordinates ?? []), [trail]);
   const positionedEchoes = useMemo(() => {
-    const routeCoordinates = outboundRouteCoordinates(trail?.route_geojson?.geometry.coordinates ?? []);
     return trailEchoes.map((echo) => ({ ...echo, coordinate: coordinateAtFraction(routeCoordinates, echo.routeFraction) }));
-  }, [trail]);
+  }, [routeCoordinates]);
 
   useEffect(() => {
     if (!slug) return;
@@ -223,7 +223,19 @@ export default function TrailStoriesScreen() {
           <Mapbox.RasterDemSource id="trail-echoes-terrain" url="mapbox://mapbox.mapbox-terrain-dem-v1" maxZoomLevel={14}>
             <Mapbox.Terrain style={{ exaggeration: 1.15 }} />
           </Mapbox.RasterDemSource>
-          {trail?.route_geojson ? <Mapbox.ShapeSource id="trail-echoes-route" shape={trail.route_geojson}><Mapbox.LineLayer id="trail-echoes-route-line" style={{ lineColor: '#277D54', lineWidth: 5, lineCap: 'round', lineJoin: 'round', lineOpacity: 0.95 }} /></Mapbox.ShapeSource> : null}
+          {trail?.route_geojson ? <>
+            <Mapbox.ShapeSource id="trail-echoes-route" shape={trail.route_geojson}>
+              <Mapbox.LineLayer id="trail-echoes-route-line" style={{ lineColor: '#277D54', lineWidth: 5, lineCap: 'round', lineJoin: 'round', lineOpacity: 0.95 }} />
+            </Mapbox.ShapeSource>
+            {routeCoordinates.length > 0 ? <>
+              <Mapbox.MarkerView id="trail-echoes-start-point" coordinate={routeCoordinates[0]} allowOverlap>
+                <View style={styles.anchorHitTarget}><View style={styles.startPoint} /></View>
+              </Mapbox.MarkerView>
+              <Mapbox.MarkerView id="trail-echoes-end-point" coordinate={routeCoordinates[routeCoordinates.length - 1]} allowOverlap>
+                <View style={styles.anchorHitTarget}><View style={styles.endPoint} /></View>
+              </Mapbox.MarkerView>
+            </> : null}
+          </> : null}
           {positionedEchoes.map((echo, index) => <Mapbox.MarkerView key={echo.id} id={`trail-echo-${echo.id}`} coordinate={echo.coordinate} allowOverlap>
             <Pressable accessibilityRole="button" accessibilityLabel={`Open echo from ${echo.place}`} onPress={() => selectEcho(echo, index)} style={styles.echoHitTarget}>
               <Animated.View style={[styles.echoPulse, selectedEcho?.id === echo.id && styles.echoPulseSelected, { transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.18] }) }] }]}>
@@ -235,6 +247,8 @@ export default function TrailStoriesScreen() {
       ) : (
         <View style={styles.mapFallback}>
           <View style={styles.fallbackRoute} />
+          <View style={[styles.fallbackStartPoint, { left: '10%', top: '47%' }]} />
+          <View style={[styles.fallbackEndPoint, { right: '12%', top: '78%' }]} />
           {trailEchoes.map((echo, index) => <Pressable key={echo.id} accessibilityRole="button" accessibilityLabel={`Open echo from ${echo.place}`} onPress={() => selectEcho({ ...echo, coordinate: routeCenter }, index)} style={[styles.fallbackMoment, echo.fallbackPosition, selectedEcho?.id === echo.id && styles.fallbackMomentSelected]} />)}
         </View>
       )}
@@ -356,6 +370,8 @@ const styles = StyleSheet.create({
   map: { ...StyleSheet.absoluteFill },
   mapFallback: { ...StyleSheet.absoluteFill, backgroundColor: '#DCE9DE' },
   fallbackRoute: { position: 'absolute', left: '10%', top: '47%', width: '78%', height: 5, borderRadius: 3, backgroundColor: '#277D54', transform: [{ rotate: '22deg' }] },
+  fallbackStartPoint: { position: 'absolute', width: 15, height: 15, marginLeft: -7.5, marginTop: -7.5, borderRadius: 8, backgroundColor: '#72D48B', borderWidth: 3, borderColor: '#FFFFFF' },
+  fallbackEndPoint: { position: 'absolute', width: 20, height: 20, marginRight: -10, marginTop: -10, borderRadius: 10, backgroundColor: '#F07455', borderWidth: 4, borderColor: '#FFFFFF', shadowColor: '#8E301D', shadowOpacity: 0.28, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
   fallbackMoment: { position: 'absolute', width: 20, height: 20, borderRadius: 10, backgroundColor: '#277D54', borderWidth: 4, borderColor: '#FFFFFF' },
   fallbackMomentSelected: { width: 31, height: 31, borderRadius: 16, marginLeft: -5.5, marginTop: -5.5, backgroundColor: '#B5D9C0' },
   overlay: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 12 },
@@ -388,6 +404,9 @@ const styles = StyleSheet.create({
   echoAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 3, borderRadius: 14, backgroundColor: '#226C4A' },
   echoActionText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   echoHitTarget: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center' },
+  anchorHitTarget: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  startPoint: { width: 15, height: 15, borderRadius: 8, backgroundColor: '#72D48B', borderWidth: 3, borderColor: '#FFFFFF' },
+  endPoint: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#F07455', borderWidth: 4, borderColor: '#FFFFFF', shadowColor: '#8E301D', shadowOpacity: 0.28, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
   echoPulse: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(39,125,84,0.28)' },
   echoPulseSelected: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(39,125,84,0.42)' },
   echoCore: { width: 13, height: 13, borderRadius: 7, backgroundColor: '#277D54', borderWidth: 3, borderColor: '#FFFFFF' },
