@@ -47,14 +47,14 @@ function Welcome({ onContinue }: { onContinue: () => void }) {
 function MarkingChoice({ markingPreference, onSelect, onFinish }: { markingPreference: MarkingPreference | null; onSelect: (value: MarkingPreference) => void; onFinish: () => void }) {
   return <View style={styles.fill}>
     <View style={styles.choiceMain}>
-      <Text style={styles.choiceTitle}>How will you{ '\n' }mark moments?</Text>
-      <Text style={styles.choiceDescription}>Choose what works for your next hike. You can change this anytime.</Text>
+      <Text style={styles.choiceTitle}>How do you want to{ '\n' }keep a moment?</Text>
+      <Text style={styles.choiceDescription}>You can change this anytime.</Text>
       <View style={styles.options}>
-        <Choice option="nod" title="With Nod" description="Press once when something catches your attention." selected={markingPreference === 'nod'} onPress={() => onSelect('nod')} />
-        <Choice option="phone" title="With my phone" description="Mark a moment from TrailMark whenever you want." selected={markingPreference === 'phone'} onPress={() => onSelect('phone')} />
+        <Choice option="nod" title="Use Nod" description="Press once when something catches your attention." selected={markingPreference === 'nod'} onPress={() => onSelect('nod')} />
+        <Choice option="phone" title="Use my phone" description="Tap to keep a moment in TrailMark." selected={markingPreference === 'phone'} onPress={() => onSelect('phone')} />
       </View>
     </View>
-    <View style={styles.bottomAction}><PageIndicator active={1} /><PrimaryButton label="Start exploring" disabled={!markingPreference} onPress={onFinish} /></View>
+    <View style={styles.bottomAction}><PageIndicator active={1} /><PrimaryButton label="Continue" disabled={!markingPreference} onPress={onFinish} /></View>
   </View>;
 }
 

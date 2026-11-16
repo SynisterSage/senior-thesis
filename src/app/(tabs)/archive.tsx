@@ -1,5 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, noticingThemes } from '@/constants/trailmark-theme';
 import { deleteSavedTrailStory, getSavedTrailStories, type SavedTrailStory } from '@/lib/trail-stories';
 import { grandPrismaticMoments } from '@/lib/trail-moments';
+import { useTabBarVisibility } from '@/lib/tab-bar-visibility';
 
 const palette = colors.light;
 const archiveThemes = {
@@ -14,6 +17,7 @@ const archiveThemes = {
   ...noticingThemes,
 };
 const topFadeOpacity = Array.from({ length: 56 }, (_, index) => Math.pow(1 - index / 55, 1.7));
+const returnWalkImage = require('../../../assets/trails/catalog/fairy-falls.jpg');
 
 type ArchiveWalk = {
   title: string;
@@ -34,11 +38,17 @@ const archiveWalks: readonly ArchiveWalk[] = [
   { title: 'Taggart Lake', location: 'Grand Teton National Park', image: require('../../../assets/trails/catalog/taggart-lake.jpg'), date: 'Jul 28, 2026', momentCount: 3, noticingFocus: 'A break in the clouds', noticeTheme: 'earth' },
   { title: 'Phelps Lake', location: 'Grand Teton National Park', image: require('../../../assets/trails/catalog/phelps-lake.jpg'), date: 'Jul 11, 2026', momentCount: 2, noticingFocus: 'Still water below', noticeTheme: 'water' },
 ];
-const preparedWalkTitles = new Set<string>([...archiveWalks.map((walk) => walk.title), 'Grand Prismatic at dusk', 'A windy return', 'Before the colors changed']);
+const relatedVisits: readonly ArchiveWalk[] = [
+  { title: 'Jenny Lake Loop', location: 'Grand Teton National Park', image: require('../../../assets/trails/catalog/jenny-lake-loop.jpg'), date: 'Oct 5, 2026', momentCount: 2, noticingFocus: 'The edge of the water', noticeTheme: 'water' },
+  { title: 'Jenny Lake Loop', location: 'Grand Teton National Park', image: require('../../../assets/trails/catalog/jenny-lake-loop.jpg'), date: 'Nov 8, 2026', momentCount: 3, noticingFocus: 'A break in the clouds', noticeTheme: 'earth' },
+];
+const preparedWalkTitles = new Set<string>([...archiveWalks.map((walk) => walk.title), ...relatedVisits.map((walk) => walk.title), 'Grand Prismatic at dusk', 'A windy return', 'Before the colors changed']);
 
 export default function ArchiveScreen() {
   const insets = useSafeAreaInsets();
+  const { onScroll } = useTabBarVisibility();
   const [stories, setStories] = useState<SavedTrailStory[]>([]);
+  const [relatedVisitsOpen, setRelatedVisitsOpen] = useState(false);
 
   useFocusEffect(useCallback(() => {
     setStories(getSavedTrailStories().filter((story) => !preparedWalkTitles.has(story.title)));
@@ -46,9 +56,16 @@ export default function ArchiveScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
-      <ScrollView automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never" contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 22 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never" contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 22 }]} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
         <Text accessibilityRole="header" style={styles.title}>Archive</Text>
         <Text style={styles.description}>Walks you chose to keep.</Text>
+
+        <Pressable accessibilityRole="button" accessibilityLabel="Return to your Fairy Falls walk" accessibilityHint="Reflect on what has stayed with you since this walk." onPress={() => router.push('/return-to-walk')} style={({ pressed }) => [styles.returnHero, pressed && styles.pressed]}>
+          <Image source={returnWalkImage} contentFit="cover" style={styles.returnHeroImage} />
+          <LinearGradient pointerEvents="none" colors={['rgba(10,25,18,0.03)', 'rgba(10,25,18,0.82)']} locations={[0.2, 1]} style={styles.returnHeroShade} />
+          <View style={styles.returnHeroCopy}><Text style={styles.returnEyebrow}>A WALK TO RETURN TO</Text><Text style={styles.returnTitle}>Fairy Falls</Text><Text style={styles.returnDetail}>Yellowstone National Park · One week ago</Text></View>
+          <View style={styles.returnHeroAction}><Text style={styles.returnHeroActionText}>Return</Text><Text style={styles.returnArrow}>›</Text></View>
+        </Pressable>
 
         {stories.length ? (
           <View style={styles.storyList}>
@@ -59,6 +76,7 @@ export default function ArchiveScreen() {
 
         <View style={styles.pastWalks}>
           <View style={styles.sectionHeading}><Text style={styles.sectionLabel}>{stories.length ? 'Earlier walks' : 'Your walks'}</Text><Text style={styles.sectionCount}>{archiveWalks.length} walks</Text></View>
+          <View style={styles.relatedVisits}><Pressable accessibilityRole="button" accessibilityState={{ expanded: relatedVisitsOpen }} accessibilityLabel={`${relatedVisitsOpen ? 'Hide' : 'Show'} two Jenny Lake Loop visits`} onPress={() => setRelatedVisitsOpen((open) => !open)} style={({ pressed }) => [styles.relatedVisitsHeader, pressed && styles.pressed]}><View><Text style={styles.relatedVisitsTitle}>Jenny Lake Loop</Text><Text style={styles.relatedVisitsDetail}>2 walks · Same trail, noticed differently.</Text></View><View style={styles.relatedVisitsControl}><View style={styles.relatedVisitsCount}><Text style={styles.relatedVisitsCountText}>2</Text></View><SymbolView name={{ ios: (relatedVisitsOpen ? 'chevron.up' : 'chevron.down') as never, android: relatedVisitsOpen ? 'keyboard_arrow_up' as never : 'keyboard_arrow_down' as never, web: relatedVisitsOpen ? 'keyboard_arrow_up' as never : 'keyboard_arrow_down' as never }} size={17} weight="semibold" tintColor={palette.accent} /></View></Pressable>{relatedVisitsOpen ? <View style={styles.relatedVisitsList}>{relatedVisits.map((walk) => <ArchiveWalkCard key={walk.date} {...walk} />)}</View> : null}</View>
           {archiveWalks.map((walk) => <ArchiveWalkCard key={walk.title} {...walk} />)}
         </View>
       </ScrollView>
@@ -110,11 +128,29 @@ const styles = StyleSheet.create({
   topFadeStrip: { flex: 1, backgroundColor: palette.background },
   title: { color: palette.text, fontSize: 34, lineHeight: 39, fontWeight: '800', letterSpacing: -0.9 },
   description: { color: palette.secondary, fontSize: 16, lineHeight: 23, marginTop: 7, maxWidth: 310 },
+  returnHero: { height: 224, overflow: 'hidden', marginTop: 24, borderRadius: 24, backgroundColor: '#294C40' },
+  returnHeroImage: { ...StyleSheet.absoluteFill },
+  returnHeroShade: { ...StyleSheet.absoluteFill },
+  returnHeroCopy: { position: 'absolute', left: 17, right: 17, bottom: 17 },
+  returnEyebrow: { color: 'rgba(255,255,255,0.84)', fontSize: 10, fontWeight: '800', letterSpacing: 0.9 },
+  returnTitle: { color: '#FFFFFF', fontSize: 23, lineHeight: 27, fontWeight: '800', letterSpacing: -0.35, marginTop: 5 },
+  returnDetail: { color: 'rgba(255,255,255,0.88)', fontSize: 12, lineHeight: 17, marginTop: 4 },
+  returnHeroAction: { position: 'absolute', top: 13, right: 13, flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 11, paddingRight: 8, paddingVertical: 7, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.92)' },
+  returnHeroActionText: { color: palette.accent, fontSize: 12, fontWeight: '800' },
+  returnArrow: { color: palette.accent, fontSize: 20, lineHeight: 20, fontWeight: '300' },
   storyList: { gap: 10, marginTop: 32 },
   pastWalks: { gap: 10, marginTop: 30 },
   sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   sectionLabel: { color: palette.text, fontSize: 19, fontWeight: '800', letterSpacing: -0.3 },
   sectionCount: { color: palette.secondary, fontSize: 11, fontWeight: '600' },
+  relatedVisits: { overflow: 'hidden', borderRadius: 19, borderWidth: 1, borderColor: '#E1E8E1', backgroundColor: '#FFFFFF' },
+  relatedVisitsHeader: { minHeight: 74, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  relatedVisitsTitle: { color: palette.text, fontSize: 16, fontWeight: '800' },
+  relatedVisitsDetail: { color: palette.secondary, fontSize: 12, marginTop: 4 },
+  relatedVisitsControl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  relatedVisitsCount: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#DCEEDD' },
+  relatedVisitsCountText: { color: palette.accent, fontSize: 12, lineHeight: 15, fontWeight: '800', textAlign: 'center' },
+  relatedVisitsList: { gap: 10, padding: 10, paddingTop: 0 },
   savedStoryCard: { minHeight: 126, flexDirection: 'row', alignItems: 'center', gap: 13, padding: 8, borderRadius: 22, borderWidth: 1, borderColor: '#DCE5DC', backgroundColor: palette.surface },
   savedStoryImage: { width: 106, alignSelf: 'stretch', minHeight: 110, borderRadius: 16, overflow: 'hidden' },
   pastWalkCard: { minHeight: 104, flexDirection: 'row', alignItems: 'center', gap: 13, padding: 11, borderRadius: 19, borderWidth: 1, borderColor: '#E1E8E1', backgroundColor: '#FFFFFF' },

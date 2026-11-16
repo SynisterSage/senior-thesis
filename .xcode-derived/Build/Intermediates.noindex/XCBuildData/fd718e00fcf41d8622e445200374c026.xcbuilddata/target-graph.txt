@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'TrailMark' in project 'TrailMark'
+➜ Explicit dependency on target 'TrailMarkLiveActivity' in project 'TrailMark'
+Target 'TrailMarkLiveActivity' in project 'TrailMark' (no dependencies)

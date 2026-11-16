@@ -31,17 +31,16 @@ export default function PairNodScreen() {
   return <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
     <StatusBar style="dark" />
     <View style={styles.content}>
-      <Text accessibilityRole="header" style={styles.title}>{pairingState === 'connected' ? 'That came through.' : pairingState === 'listening' ? 'Find your Nod.' : 'Meet Nod.'}</Text>
-      <Text style={styles.description}>{pairingState === 'connected' ? 'Nod is ready to keep a moment while you keep moving.' : pairingState === 'listening' ? 'Press Nod once to connect it to this hike.' : 'A quiet way to keep something that catches your attention.'}</Text>
+      <Text accessibilityRole="header" style={styles.title}>{pairingState === 'connected' ? 'Nod is ready.' : pairingState === 'listening' ? 'Give Nod a tap.' : 'Meet Nod.'}</Text>
+      <Text style={styles.description}>{pairingState === 'connected' ? 'Keep your phone away. Nod will keep the moment.' : pairingState === 'listening' ? 'One tap is all it takes.' : 'A little way to keep what catches your attention.'}</Text>
       <NodDevice state={pairingState} onPress={confirmButtonPress} />
       <View style={styles.statusRow}>
         {pairingState === 'listening' ? <ListeningIndicator /> : <View style={[styles.statusDot, pairingState === 'connected' && styles.statusDotConnected]} />}
-        <Text accessibilityLiveRegion="polite" style={styles.status}>{pairingState === 'ready' ? 'Ready when you are' : pairingState === 'listening' ? 'Listening for Nod…' : 'Connected and ready'}</Text>
+        <Text accessibilityLiveRegion="polite" style={styles.status}>{pairingState === 'ready' ? 'Ready when you are' : pairingState === 'listening' ? 'Waiting for your tap' : 'Connected and ready'}</Text>
       </View>
     </View>
     <View style={styles.actions}>
-      {pairingState === 'ready' ? <><Pressable accessibilityRole="button" onPress={finish} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Set up later</Text></Pressable><Action label="Bring Nod to life" onPress={beginPairing} /></> : null}
-      {pairingState === 'listening' ? <Action label="Press the device above" disabled onPress={() => {}} /> : null}
+      {pairingState === 'ready' ? <><Pressable accessibilityRole="button" onPress={finish} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Set up later</Text></Pressable><Action label="Meet Nod" onPress={beginPairing} /></> : null}
       {pairingState === 'connected' ? <Action label="Start exploring" onPress={finish} /> : null}
     </View>
   </SafeAreaView>;

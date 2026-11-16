@@ -5,7 +5,7 @@ import { SymbolView } from 'expo-symbols';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { Feature, LineString, Position } from 'geojson';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { clearActiveHikeDraft, getActiveHikeDraft, saveActiveHikeDraft, type Cap
 import { isNodConnected } from '@/lib/onboarding';
 import { getLiveMapStyle, type LiveMapStyle } from '@/lib/trailmark-preferences';
 import { startHikeBackgroundTracking, stopHikeBackgroundTracking } from '@/lib/hike-background';
+import { endHikeLiveActivity, startHikeLiveActivity, updateHikeLiveActivity } from '@/lib/hike-live-activity';
 
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 const fallbackMarkCoordinate: Position = [-110.836, 44.520];
@@ -163,7 +164,7 @@ if (mapboxToken) Mapbox.setAccessToken(mapboxToken);
 
 export default function HikeScreen() {
   const { slug, focusId, notice } = useLocalSearchParams<{ slug?: string; focusId?: string; notice?: string }>();
-  const nodConnected = isNodConnected();
+  const [nodConnected, setNodConnected] = useState(() => isNodConnected());
   const storedDraft = getActiveHikeDraft();
   const matchingDraft = storedDraft?.slug === (slug ?? 'grand-prismatic-overlook') ? storedDraft : undefined;
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -172,6 +173,8 @@ export default function HikeScreen() {
   const routeDrawDelay = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeCueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveActivityEventTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveActivityStarted = useRef(false);
   const routeDrawFrame = useRef<number | null>(null);
   const hasPlayedArrivalCamera = useRef(false);
   const hasPlayedRouteDraw = useRef(false);
@@ -223,6 +226,7 @@ export default function HikeScreen() {
   const guidanceDismissed = useRef(false);
   useFocusEffect(useCallback(() => {
     setLiveMapStyle(getLiveMapStyle());
+    setNodConnected(isNodConnected());
   }, []));
   useEffect(() => () => {
     if (storyCameraTimer.current) clearTimeout(storyCameraTimer.current);
@@ -230,6 +234,7 @@ export default function HikeScreen() {
     if (routeDrawDelay.current) clearTimeout(routeDrawDelay.current);
     if (markNoticeTimer.current) clearTimeout(markNoticeTimer.current);
     if (noticeCueTimer.current) clearTimeout(noticeCueTimer.current);
+    if (liveActivityEventTimer.current) clearTimeout(liveActivityEventTimer.current);
     if (routeDrawFrame.current) cancelAnimationFrame(routeDrawFrame.current);
   }, []);
 
@@ -254,11 +259,28 @@ export default function HikeScreen() {
 
   useEffect(() => {
     void startHikeBackgroundTracking();
+    void startHikeLiveActivity(trailName, markedMoments.length, nodConnected).then(() => {
+      liveActivityStarted.current = true;
+    });
     return () => {
       // The active session remains registered while the app is backgrounded.
       // It is explicitly stopped when the user finishes or discards the hike.
+      void endHikeLiveActivity(trailName);
     };
+  // Register one activity for this hike; updates are handled by the effect below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!liveActivityStarted.current) return;
+    void updateHikeLiveActivity(
+      trailName,
+      markedMoments.length,
+      nodConnected,
+      nodConnected ? 'walking' : 'disconnected',
+      nodConnected ? undefined : 'Phone marking available',
+    );
+  }, [markedMoments.length, nodConnected, trailName]);
 
   useEffect(() => {
     if (!routeShape || hasPlayedArrivalCamera.current) return;
@@ -377,6 +399,12 @@ export default function HikeScreen() {
     const nextMoments = [...markedMoments, moment];
     const sendsNoticeCue = source === 'nod' && nextMoments.length === 3 && noticeCueStatus === 'ready';
     setMarkedMoments(nextMoments);
+    void updateHikeLiveActivity(trailName, nextMoments.length, nodConnected, 'moment', 'Moment kept');
+    if (liveActivityEventTimer.current) clearTimeout(liveActivityEventTimer.current);
+    liveActivityEventTimer.current = setTimeout(() => {
+      void updateHikeLiveActivity(trailName, nextMoments.length, nodConnected, 'walking');
+      liveActivityEventTimer.current = null;
+    }, 2400);
     persistDraft(nextMoments, storyNotes);
     setLatestMarkId(moment.id);
     if (source === 'nod') {
@@ -427,7 +455,7 @@ export default function HikeScreen() {
   const confirmLeaveHike = () => {
     Alert.alert('Leave this hike?', 'Your captured moments will be discarded, and this trail will start fresh next time.', [
       { text: 'Keep hiking', style: 'cancel' },
-      { text: 'Discard and leave', style: 'destructive', onPress: () => { void stopHikeBackgroundTracking(); clearActiveHikeDraft(); router.back(); } },
+      { text: 'Discard and leave', style: 'destructive', onPress: () => { void stopHikeBackgroundTracking(); void endHikeLiveActivity(trailName); clearActiveHikeDraft(); router.back(); } },
     ]);
   };
   const returnToHike = () => {
@@ -449,6 +477,16 @@ export default function HikeScreen() {
     ]).start();
     Animated.spring(nodSheetOffset, { toValue: 0, damping: 19, stiffness: 150, useNativeDriver: true }).start();
   };
+  const openLiveActivitySettings = () => {
+    Alert.alert(
+      'Lock Screen hike status',
+      'TrailMark can keep this hike visible on your Lock Screen while you walk. You can turn Live Activities on or off in iPhone Settings.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Open iPhone Settings', onPress: () => void Linking.openSettings() },
+      ],
+    );
+  };
   const closeNodSheet = () => {
     Animated.timing(nodSheetOffset, { toValue: 360, duration: 180, useNativeDriver: true }).start(() => setNodSheetOpen(false));
     Animated.parallel([
@@ -458,6 +496,8 @@ export default function HikeScreen() {
   };
   const finishHike = () => {
     void stopHikeBackgroundTracking();
+    void updateHikeLiveActivity(trailName, markedMoments.length, nodConnected, 'complete');
+    setTimeout(() => void endHikeLiveActivity(trailName), 1800);
     if (storyCameraTimer.current) clearTimeout(storyCameraTimer.current);
     if (noticeCueTimer.current) clearTimeout(noticeCueTimer.current);
     setStoryStyleLoaded(false);
@@ -684,6 +724,9 @@ export default function HikeScreen() {
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
             <TrailSymbol name="gearshape" androidName="settings" size={18} color="#FFFFFF" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Manage Lock Screen hike status" onPress={openLiveActivitySettings} style={({ pressed }) => [styles.mapControl, styles.liveActivityControl, pressed && styles.pressed]}>
+            <TrailSymbol name="rectangle.inset.filled.and.person.filled" androidName="lock" size={17} color="#DDF2E3" />
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Recenter route" onPress={centerRoute} style={({ pressed }) => [styles.mapControl, pressed && styles.pressed]}>
             <TrailSymbol name="scope" androidName="center_focus_strong" size={18} color="#FFFFFF" />
@@ -937,6 +980,7 @@ const styles = StyleSheet.create({
   roundControl: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#183126', borderWidth: 1, borderColor: '#2C5A43' },
   mapControls: { position: 'absolute', right: 12, top: 285, gap: 9 },
   mapControl: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(24, 49, 38, 0.94)', borderWidth: 1, borderColor: '#2C5A43' },
+  liveActivityControl: { borderColor: '#5B8D6B' },
   storyExitControls: { position: 'absolute', top: 68, right: 12 },
   storyExitControl: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(245,247,243,0.96)', borderWidth: 1, borderColor: '#D7E3DD' },
   leaveControl: { backgroundColor: '#C7463D', borderColor: '#E1766D' },

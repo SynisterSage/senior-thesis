@@ -1,0 +1,49 @@
+{
+  "" : {
+    "diagnostics" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMark-primary.dia",
+    "emit-module-dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMark-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMark-primary-emit-module.dia",
+    "pch" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMark-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMark-primary.swiftdeps"
+  },
+  "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/lex/Desktop/Senior Thesis/trailmark-app/ios/TrailMark/AppDelegate.swift" : {
+    "const-values" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  },
+  "/Users/lex/Desktop/Senior Thesis/trailmark-app/ios/TrailMark/SceneDelegate.swift" : {
+    "const-values" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate.swiftconstvalues",
+    "dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate.d",
+    "diagnostics" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate.dia",
+    "index-unit-output-path" : "/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate.o",
+    "llvm-bc" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate.bc",
+    "object" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate.o",
+    "swift-dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate.swiftdeps",
+    "swiftmodule" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/SceneDelegate~partial.swiftmodule"
+  },
+  "/Users/lex/Desktop/Senior Thesis/trailmark-app/ios/TrailMark/TrailMarkLiveActivityModule.swift" : {
+    "const-values" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule.swiftconstvalues",
+    "dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule.d",
+    "diagnostics" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule.dia",
+    "index-unit-output-path" : "/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule.o",
+    "llvm-bc" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule.bc",
+    "object" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule.o",
+    "swift-dependencies" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule.swiftdeps",
+    "swiftmodule" : "/Users/lex/Desktop/Senior Thesis/trailmark-app/.xcode-derived/Build/Intermediates.noindex/TrailMark.build/Debug-iphoneos/TrailMark.build/Objects-normal/arm64/TrailMarkLiveActivityModule~partial.swiftmodule"
+  }
+}

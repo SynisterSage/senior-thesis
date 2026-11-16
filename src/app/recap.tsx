@@ -67,8 +67,9 @@ const noticingLenses = [defaultNoticeTheme, ...Object.values(noticingThemes)];
 type StoryNoticeThemeId = 'default' | keyof typeof noticingThemes;
 
 export default function RecapScreen() {
-  const params = useLocalSearchParams<{ markedCount?: string; notes?: string; momentIds?: string; marks?: string; routeCoordinates?: string; storyId?: string; focusId?: string; focus?: string; noticeTheme?: string }>();
+  const params = useLocalSearchParams<{ markedCount?: string; notes?: string; momentIds?: string; marks?: string; routeCoordinates?: string; storyId?: string; focusId?: string; focus?: string; noticeTheme?: string; title?: string; location?: string }>();
   const saved = useMemo(() => params.storyId ? getSavedTrailStory(params.storyId) : undefined, [params.storyId]);
+  const recapLocation = saved?.location ?? params.location ?? 'Yellowstone National Park';
   const notes = useMemo(() => saved?.notes ?? parse<string>(params.notes), [saved, params.notes]);
   const ids = useMemo(() => saved?.momentIds ?? parse<string>(params.momentIds), [saved, params.momentIds]);
   const marks = useMemo(() => saved?.marks ?? parse<CapturedTrailMoment>(params.marks), [saved, params.marks]);
@@ -83,7 +84,7 @@ export default function RecapScreen() {
   const [composerTarget, setComposerTarget] = useState(-1);
   const [momentAddTarget, setMomentAddTarget] = useState<number | null>(null);
   const [momentAdditions, setMomentAdditions] = useState<Record<number, MomentAddition>>(() => Object.fromEntries(Object.entries(saved?.additions ?? {}).map(([key, addition]) => [Number(key), { image: addition.imageIndex === undefined ? undefined : photoChoices[addition.imageIndex], thought: addition.thought }])));
-  const [title, setTitle] = useState(saved?.title ?? 'Grand Prismatic Overlook');
+  const [title, setTitle] = useState(saved?.title ?? params.title ?? 'Grand Prismatic Overlook');
   const [noticeTheme, setNoticeTheme] = useState<StoryNoticeThemeId>((saved?.noticeTheme as StoryNoticeThemeId | undefined) ?? (params.noticeTheme as StoryNoticeThemeId | undefined) ?? 'default');
   const activeNoticeTheme = noticeTheme === 'default' ? defaultNoticeTheme : noticingThemes[noticeTheme];
   const [mapMood, setMapMood] = useState<StoryMapStyle>((saved?.mapMood as StoryMapStyle) ?? (noticeTheme === 'water' ? 'blue-dream' : noticeTheme === 'earth' ? 'sunset' : 'terrain'));
@@ -119,7 +120,7 @@ export default function RecapScreen() {
       <View style={s.portrait}>
         <StoryMap route={route} moments={moments} active={-1} mapStyle={mapMood} reducedMotion={reducedMotion} hero />
         {noticingFocus ? <View style={[s.portraitFocusBadge, { borderColor: activeNoticeTheme.accent }]}><Text style={[s.portraitFocusBadgeText, { color: activeNoticeTheme.accent }]}>Noticing {noticingFocus}</Text></View> : null}
-        <View style={[s.portraitCaption, { backgroundColor: activeNoticeTheme.surface }]}><Text style={s.portraitSmall}>Yellowstone National Park</Text><Text accessibilityRole="header" style={[s.portraitTitle, { color: activeNoticeTheme.ink }]}>{title}</Text><Text style={[s.portraitMeta, { color: activeNoticeTheme.accent }]}>{keptMeta}</Text></View>
+        <View style={[s.portraitCaption, { backgroundColor: activeNoticeTheme.surface }]}><Text style={s.portraitSmall}>{recapLocation}</Text><Text accessibilityRole="header" style={[s.portraitTitle, { color: activeNoticeTheme.ink }]}>{title}</Text><Text style={[s.portraitMeta, { color: activeNoticeTheme.accent }]}>{keptMeta}</Text></View>
         <Pressable accessibilityRole="button" accessibilityLabel="Share story" onPress={() => openComposer()} style={({ pressed }) => [s.heroStoryButton, { backgroundColor: activeNoticeTheme.accent }, pressed && s.pressed]}><TrailSymbol name="square.and.arrow.up" androidName="share" size={18} color="#FFFFFF" /></Pressable>
       </View>
       <View style={s.momentIntro}><Text style={s.sectionTitle}>Your moments</Text><Text style={s.secondary}>{noticingFocus ? `Places and words · ${noticingFocus}` : 'Places and words you chose to keep.'}</Text></View>

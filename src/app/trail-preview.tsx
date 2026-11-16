@@ -235,6 +235,7 @@ export default function TrailPreviewScreen() {
             </Pressable>
           </View>
 
+
           <View style={styles.briefing}>
             <View style={styles.briefingIntro}>
               <Text style={styles.sectionTitle}>Before you go</Text>

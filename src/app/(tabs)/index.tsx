@@ -11,9 +11,11 @@ import { colors } from '@/constants/trailmark-theme';
 import { getNodStatus } from '@/lib/nod';
 import { getSavedTrails, removeSavedTrail, saveTrail } from '@/lib/saved-trails';
 import { noticingFocuses } from '@/lib/noticing-focuses';
+import { useTabBarVisibility } from '@/lib/tab-bar-visibility';
 
 const palette = colors.light;
 const topFadeOpacity = Array.from({ length: 56 }, (_, index) => Math.pow(1 - index / 55, 1.7));
+const searchHints = ['Search Yellowstone, Grand Teton, or Wyoming', 'Try “mountain” or “waterfalls”', 'Find a quiet trail to notice'];
 const overlookImage = require('../../../assets/trails/grand-prismatic/overlook.jpg');
 const midwayImage = require('../../../assets/trails/catalog/midway-geyser-basin.jpg');
 const fairyFallsImage = require('../../../assets/trails/catalog/fairy-falls.jpg');
@@ -77,11 +79,14 @@ const popularTrails: CatalogTrail[] = [
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
+  const { onScroll } = useTabBarVisibility();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeYellowstoneIndex, setActiveYellowstoneIndex] = useState(0);
   const [savedTrailIds, setSavedTrailIds] = useState<string[]>([]);
   const [nodStatus, setNodStatus] = useState(getNodStatus());
+  const [searchHintIndex, setSearchHintIndex] = useState(0);
+  const [searchHintOpacity] = useState(() => new Animated.Value(1));
   const [echoTransition] = useState(() => new Animated.Value(1));
   const openSampleTrail = () => Alert.alert('Preview trail', 'Grand Prismatic Overlook is the complete trail available in this prototype.');
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -89,7 +94,9 @@ export default function ExploreScreen() {
   const allTrails = [...yellowstoneTrails, ...popularTrails];
   const visibleTrails = (filtering ? allTrails : popularTrails).filter((trail) => {
     const matchesCategory = !selectedCategory || trail.categories.includes(selectedCategory);
-    const searchableText = `${trail.title} ${trail.location} ${trail.detail} ${trail.categories.join(' ')}`.toLowerCase();
+    const categoryLabels = trail.categories.map((id) => categoryOptions.find((category) => category.id === id)?.label ?? id).join(' ');
+    const locationAliases = trail.location.includes('Yellowstone') ? 'yellowstone wyoming' : 'grand teton wyoming';
+    const searchableText = `${trail.title} ${trail.location} ${locationAliases} ${trail.detail} ${trail.categories.join(' ')} ${categoryLabels}`.toLowerCase();
     return matchesCategory && (!normalizedSearch || searchableText.includes(normalizedSearch));
   });
   const visibleTrailCount = visibleTrails.length;
@@ -106,6 +113,20 @@ export default function ExploreScreen() {
     Animated.timing(echoTransition, { toValue: 1, duration: 240, useNativeDriver: true }).start();
   }, [activeYellowstoneIndex, echoTransition]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      Animated.timing(searchHintOpacity, { toValue: 0, duration: 220, useNativeDriver: true }).start(({ finished }) => {
+        if (!finished) return;
+        setSearchHintIndex((current) => (current + 1) % searchHints.length);
+        Animated.timing(searchHintOpacity, { toValue: 1, duration: 320, useNativeDriver: true }).start();
+      });
+    }, 3000);
+    return () => {
+      clearInterval(timer);
+      searchHintOpacity.stopAnimation();
+    };
+  }, [searchHintOpacity]);
+
   const toggleSavedTrail = (trail: CatalogTrail) => {
     if (savedTrailIds.includes(trail.mapId)) {
       removeSavedTrail(trail.mapId);
@@ -119,10 +140,22 @@ export default function ExploreScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
       <StatusBar style="dark" />
-      <ScrollView automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never" contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}><Text accessibilityRole="header" style={styles.title}>Explore trails</Text><View style={styles.headerActions}><Pressable accessibilityRole="button" accessibilityLabel={nodStatus.connected ? `Open Nod, connected with ${nodStatus.batteryPercent} percent battery` : 'Open Nod setup'} onPress={() => router.navigate('/(tabs)/nod')} style={({ pressed }) => [styles.nodStatusButton, pressed && styles.pressed]}><TrailSymbol name={nodStatus.connected ? 'battery.75' : 'battery.0'} androidName="battery_std" size={18} color={nodStatus.connected ? '#3D8B5B' : palette.secondary} />{nodStatus.connected ? <Text style={styles.nodBatteryText}>{nodStatus.batteryPercent}%</Text> : null}</Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Open saved trails${savedTrailIds.length ? `, ${savedTrailIds.length} saved` : ''}`} onPress={() => router.push('/saved-trails')} style={({ pressed }) => [styles.savedButton, pressed && styles.pressed]}><TrailSymbol name={savedTrailIds.length ? 'heart.fill' : 'heart'} androidName={savedTrailIds.length ? 'favorite' : 'favorite_border'} size={17} color={savedTrailIds.length ? '#B65751' : palette.accent} />{savedTrailIds.length ? <Text style={styles.savedButtonCount}>{savedTrailIds.length}</Text> : null}</Pressable></View></View>
+      <ScrollView automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never" contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
+        <View style={styles.header}>
+          <Text accessibilityRole="header" style={styles.title}>Explore trails</Text>
+          <View style={styles.headerActions}>
+            <Pressable accessibilityRole="button" accessibilityLabel={nodStatus.connected ? `Open Nod, connected with ${nodStatus.batteryPercent} percent battery` : 'Open Nod setup'} onPress={() => router.navigate('/(tabs)/nod')} style={({ pressed }) => [styles.nodStatusButton, pressed && styles.pressed]}>
+              <TrailSymbol name={nodStatus.connected ? 'battery.75' : 'battery.0'} androidName="battery_std" size={18} color={nodStatus.connected ? '#3D8B5B' : palette.secondary} />
+              {nodStatus.connected ? <Text style={styles.nodBatteryText}>{`${nodStatus.batteryPercent}%`}</Text> : null}
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open saved trails${savedTrailIds.length ? `, ${savedTrailIds.length} saved` : ''}`} onPress={() => router.push('/saved-trails')} style={({ pressed }) => [styles.savedButton, pressed && styles.pressed]}>
+              <TrailSymbol name={savedTrailIds.length ? 'heart.fill' : 'heart'} androidName={savedTrailIds.length ? 'favorite' : 'favorite_border'} size={17} color={savedTrailIds.length ? '#B65751' : palette.accent} />
+              {savedTrailIds.length ? <Text style={styles.savedButtonCount}>{String(savedTrailIds.length)}</Text> : null}
+            </Pressable>
+          </View>
+        </View>
         <View style={styles.location}><TrailSymbol name="location.fill" androidName="location_on" size={14} color={palette.accent} /><Text style={styles.locationText}>Yellowstone National Park</Text><TrailSymbol name="chevron.down" androidName="expand_more" size={15} color={palette.secondary} /></View>
-        <View style={styles.search}><TrailSymbol name="magnifyingglass" androidName="search" size={17} color="#72827E" /><TextInput accessibilityLabel="Search trails, parks, and places" value={searchQuery} onChangeText={setSearchQuery} autoCapitalize="none" autoCorrect={false} returnKeyType="search" placeholder="Search trails, parks, places" placeholderTextColor="#7A8986" style={styles.searchInput} />{searchQuery ? <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearchQuery('')} style={styles.clearSearch}><TrailSymbol name="xmark" androidName="close" size={13} color={palette.secondary} /></Pressable> : null}</View>
+        <View style={styles.search}><TrailSymbol name="magnifyingglass" androidName="search" size={17} color="#72827E" /><View style={styles.searchInputWrap}>{!searchQuery ? <Animated.Text pointerEvents="none" style={[styles.searchHint, { opacity: searchHintOpacity }]}>{searchHints[searchHintIndex]}</Animated.Text> : null}<TextInput accessibilityLabel="Search trails, parks, and places" value={searchQuery} onChangeText={setSearchQuery} autoCapitalize="none" autoCorrect={false} returnKeyType="search" style={styles.searchInput} /> </View>{searchQuery ? <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearchQuery('')} style={styles.clearSearch}><TrailSymbol name="xmark" androidName="close" size={13} color={palette.secondary} /></Pressable> : null}</View>
 
         <Pressable accessibilityRole="button" accessibilityLabel="Open Around You map to discover trails and echoes" onPress={() => router.push('/around-you')} style={({ pressed }) => [styles.aroundYouCard, pressed && styles.pressed]}>
           <View style={styles.aroundYouIcon}><TrailSymbol name="map.fill" androidName="map" size={17} color={palette.accent} /></View>
@@ -190,7 +223,7 @@ function TrailSymbol({ name, androidName, size, color }: { name: string; android
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.background }, scroll: { paddingHorizontal: 18, paddingTop: 80, paddingBottom: 128 }, topFade: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }, topFadeStrip: { flex: 1, backgroundColor: palette.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerActions: { flexDirection: 'row', alignItems: 'center', gap: 7 }, title: { color: palette.text, fontSize: 34, lineHeight: 39, fontWeight: '800', letterSpacing: -0.9 }, nodStatusButton: { minWidth: 42, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, borderRadius: 21, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7E6' }, nodBatteryText: { color: '#3D8B5B', fontSize: 10, fontWeight: '800' }, savedButton: { minWidth: 42, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 11, borderRadius: 21, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7E6' }, savedButtonCount: { color: palette.text, fontSize: 12, fontWeight: '800' }, location: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 20 }, locationText: { color: palette.accent, fontSize: 12, fontWeight: '800' }, search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 46, paddingHorizontal: 13, marginTop: 13, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7E6' }, searchInput: { flex: 1, color: palette.text, fontSize: 13 }, clearSearch: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8EFED' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerActions: { flexDirection: 'row', alignItems: 'center', gap: 7 }, title: { color: palette.text, fontSize: 34, lineHeight: 39, fontWeight: '800', letterSpacing: -0.9 }, nodStatusButton: { minWidth: 42, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, borderRadius: 21, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7E6' }, nodBatteryText: { color: '#3D8B5B', fontSize: 10, fontWeight: '800' }, savedButton: { minWidth: 42, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 11, borderRadius: 21, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7E6' }, savedButtonCount: { color: palette.text, fontSize: 12, fontWeight: '800' }, location: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 20 }, locationText: { color: palette.accent, fontSize: 12, fontWeight: '800' }, search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 46, paddingHorizontal: 13, marginTop: 13, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCE7E6' }, searchInputWrap: { flex: 1, justifyContent: 'center', position: 'relative' }, searchInput: { color: palette.text, fontSize: 13, paddingVertical: 0, zIndex: 1 }, searchHint: { position: 'absolute', left: 0, right: 0, color: '#7A8986', fontSize: 13 }, clearSearch: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8EFED' },
   sectionHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 28, marginBottom: 12 }, sectionTitle: { color: palette.text, fontSize: 19, fontWeight: '800', letterSpacing: -0.3 }, sectionMeta: { color: palette.secondary, fontSize: 11, fontWeight: '600' }, categoryRow: { position: 'relative', height: 97 }, categoryRail: { gap: 11, paddingRight: 28 }, categoryFadeStrong: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 8, backgroundColor: palette.background, opacity: 0.9 }, categoryFadeMedium: { position: 'absolute', top: 0, right: 8, bottom: 0, width: 8, backgroundColor: palette.background, opacity: 0.62 }, categoryFadeSoft: { position: 'absolute', top: 0, right: 16, bottom: 0, width: 10, backgroundColor: palette.background, opacity: 0.32 }, category: { width: 76, height: 97, alignItems: 'center', gap: 7 }, categoryIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E9E8' }, categoryIconSelected: { backgroundColor: palette.accent, borderColor: palette.accent }, categoryLabel: { width: 76, height: 26, color: palette.secondary, fontSize: 10, lineHeight: 13, textAlign: 'center' }, categoryLabelSelected: { color: palette.accent, fontWeight: '800' },
   aroundYouCard: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 16, paddingHorizontal: 13, paddingVertical: 10, borderRadius: 17, backgroundColor: '#F0F5F0', borderWidth: 1, borderColor: '#D9E6DA' }, aroundYouIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCEDE0' }, aroundYouCopy: { flex: 1, gap: 2 }, aroundYouTitle: { color: palette.text, fontSize: 14, lineHeight: 17, fontWeight: '800' }, aroundYouText: { color: palette.secondary, fontSize: 11, lineHeight: 14 },
   echoPreview: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 25, paddingHorizontal: 13, paddingVertical: 12, borderRadius: 17, backgroundColor: '#F0F5F0', borderWidth: 1, borderColor: '#D9E6DA' }, echoPreviewIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#DCEDE0' }, echoPreviewCopy: { flex: 1, gap: 3 }, echoPreviewEyebrow: { color: palette.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.35 }, echoPreviewText: { color: palette.text, fontSize: 13, lineHeight: 17, fontWeight: '600' },

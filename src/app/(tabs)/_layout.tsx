@@ -2,10 +2,11 @@ import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 import { SymbolView } from 'expo-symbols';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '@/constants/trailmark-theme';
+import { TabBarVisibilityProvider, useRegisterTabBar } from '@/lib/tab-bar-visibility';
 
 const palette = colors.light;
 
@@ -16,26 +17,36 @@ const tabDefinitions = {
 } as const;
 
 export default function TabLayout() {
-  return (
+  return <TabBarVisibilityProvider>
     <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <FloatingTabBar {...props} />}>
       <Tabs.Screen name="trails" options={{ title: 'Explore' }} />
       <Tabs.Screen name="archive" options={{ title: 'Archive' }} />
       <Tabs.Screen name="nod" options={{ title: 'Nod' }} />
     </Tabs>
-  );
+  </TabBarVisibilityProvider>;
 }
 
 function FloatingTabBar({ state, descriptors, navigateToTab, insets }: BottomTabBarProps) {
   const safeInsets = useSafeAreaInsets();
   const [dockProgress] = useState(() => new Animated.Value(0));
+  const [dockIsVisible, setDockIsVisible] = useState(true);
+  const dockVisible = useRef(true);
 
   useEffect(() => {
     Animated.spring(dockProgress, { toValue: 1, damping: 18, stiffness: 220, mass: 0.7, useNativeDriver: true }).start();
   }, [dockProgress]);
 
+  const setDockVisible = useCallback((visible: boolean) => {
+    if (dockVisible.current === visible) return;
+    dockVisible.current = visible;
+    setDockIsVisible(visible);
+    Animated.spring(dockProgress, { toValue: visible ? 1 : 0, damping: 22, stiffness: 240, mass: 0.8, useNativeDriver: true }).start();
+  }, [dockProgress]);
+  useRegisterTabBar(setDockVisible);
+
   return (
     <View pointerEvents="box-none" style={[styles.dockPosition, { paddingBottom: Math.max(Math.max(insets.bottom, safeInsets.bottom) - 5, 6) }]}>
-      <Animated.View style={[styles.dock, { opacity: dockProgress, transform: [{ translateY: dockProgress.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
+      <Animated.View pointerEvents={dockIsVisible ? 'auto' : 'none'} style={[styles.dock, { opacity: dockProgress, transform: [{ translateY: dockProgress.interpolate({ inputRange: [0, 1], outputRange: [90, 0] }) }] }]}>
         {state.routes.map((route, index) => {
           const definition = tabDefinitions[route.name as keyof typeof tabDefinitions];
           if (!definition) return null;

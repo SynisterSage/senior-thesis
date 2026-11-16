@@ -26,6 +26,7 @@ export default function SettingsScreen() {
   const [nodManageOpen, setNodManageOpen] = useState(() => open === 'nod');
   const [storyStorageOpen, setStoryStorageOpen] = useState(false);
   const [nodTested, setNodTested] = useState(false);
+  const [nodLocating, setNodLocating] = useState(false);
   const [liveMapStyle, setLiveMapStyleState] = useState<LiveMapStyle>(getLiveMapStyle());
   const [replayPace, setReplayPaceState] = useState<ReplayPace>(getReplayPace());
   const [includeWords, setIncludeWordsState] = useState(getIncludeWords());
@@ -52,6 +53,7 @@ export default function SettingsScreen() {
       <Section label="HIKE AND LOCATION">
         <SettingsRow icon="location.fill" androidIcon="location_on" title="Location access" detail="Used to place moments along your walk" action="Manage" onPress={() => void Linking.openSettings()} />
         <SettingsRow icon="lock.open" androidIcon="lock_open" title="Active hike tracking" detail="Keeps an active hike ready while your phone is locked" action="On" />
+        <SettingsRow icon="rectangle.inset.filled.and.person.filled" androidIcon="lock" title="Lock Screen hike status" detail="Manage Live Activities for TrailMark in iPhone Settings" action="Open" onPress={() => void Linking.openSettings()} />
       </Section>
 
       <Section label="DEFAULTS">
@@ -66,7 +68,7 @@ export default function SettingsScreen() {
       </Section>
 
       <Section label="HELP">
-        <SettingsRow icon="hand.tap" androidIcon="touch_app" title="How Nod works" detail="Press once when something catches your attention" action="Read" onPress={() => { void WebBrowser.openBrowserAsync(legalLinks.help); }} />
+        <SettingsRow icon="hand.tap" androidIcon="touch_app" title="How Nod works" detail="Learn the physical interaction" action="Open" onPress={() => router.push('/nod-tutorial')} />
         <SettingsRow icon="questionmark.circle" androidIcon="help_outline" title="Troubleshooting" detail="Connection and marking help" action="Read" onPress={() => { void WebBrowser.openBrowserAsync(legalLinks.troubleshooting); }} />
       </Section>
 
@@ -79,12 +81,12 @@ export default function SettingsScreen() {
         <SettingsRow icon="info.circle" androidIcon="info" title="About TrailMark" detail="Version 1.0.0" />
       </Section>
     </ScrollView>
-    <NodManagementSheet visible={nodManageOpen} connected={nodConnected} tested={nodTested} onTest={() => setNodTested(true)} onClose={() => setNodManageOpen(false)} />
+    <NodManagementSheet visible={nodManageOpen} connected={nodConnected} tested={nodTested} locating={nodLocating} onTest={() => setNodTested(true)} onFind={() => { setNodLocating(true); setTimeout(() => setNodLocating(false), 8000); }} onClose={() => setNodManageOpen(false)} />
     <StoryStorageSheet key={storyStorageOpen ? 'open' : 'closed'} visible={storyStorageOpen} onClose={() => setStoryStorageOpen(false)} />
   </SafeAreaView>;
 }
 
-function NodManagementSheet({ visible, connected, tested, onTest, onClose }: { visible: boolean; connected: boolean; tested: boolean; onTest: () => void; onClose: () => void }) {
+function NodManagementSheet({ visible, connected, tested, locating, onTest, onFind, onClose }: { visible: boolean; connected: boolean; tested: boolean; locating: boolean; onTest: () => void; onFind: () => void; onClose: () => void }) {
   const [sheetProgress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -105,6 +107,8 @@ function NodManagementSheet({ visible, connected, tested, onTest, onClose }: { v
         {connected ? <>
           <View style={styles.deviceStatus}><View><Text style={styles.deviceStatusLabel}>Nod status</Text><Text style={styles.deviceStatusValue}>Connected · {getNodStatus().batteryPercent}% battery</Text></View><Text style={styles.deviceStatusMeta}>{getNodStatus().lastSyncLabel}</Text></View>
           <Pressable accessibilityRole="button" onPress={onTest} style={({ pressed }) => [styles.sheetPrimary, pressed && styles.pressed]}><Text style={styles.sheetPrimaryText}>{tested ? 'That came through.' : 'Test Nod'}</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={onFind} style={({ pressed }) => [styles.findNodButton, locating && styles.findNodButtonActive, pressed && styles.pressed]}><SymbolView name={{ ios: 'dot.radiowaves.left.and.right' as never, android: 'radar' as never, web: 'radar' as never }} size={17} weight="semibold" tintColor={locating ? '#FFFFFF' : palette.accent} /><View style={styles.findNodCopy}><Text style={[styles.findNodTitle, locating && styles.findNodTitleActive]}>{locating ? 'Nod is signaling nearby' : 'Find Nod'}</Text><Text style={[styles.findNodDetail, locating && styles.findNodDetailActive]}>{locating ? 'The signal ends in a few seconds.' : 'Make Nod pulse when it is nearby.'}</Text></View></Pressable>
+          <Text style={styles.findNodNote}>Demo preview: a connected Nod would pulse its light for eight seconds.</Text>
           <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/pair-nod', params: { returnTo: 'settings' } }); }} style={({ pressed }) => [styles.sheetSecondary, pressed && styles.pressed]}><Text style={styles.sheetSecondaryText}>Reconnect Nod</Text></Pressable>
         </> : <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/pair-nod', params: { returnTo: 'settings' } }); }} style={({ pressed }) => [styles.sheetPrimary, pressed && styles.pressed]}><Text style={styles.sheetPrimaryText}>Set up Nod</Text></Pressable>}
       </Animated.View>
@@ -198,6 +202,14 @@ const styles = StyleSheet.create({
   deviceStatusMeta: { color: palette.accent, fontSize: 11, fontWeight: '800' },
   sheetPrimary: { minHeight: 54, alignItems: 'center', justifyContent: 'center', marginTop: 13, borderRadius: 17, backgroundColor: palette.accent },
   sheetPrimaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  findNodButton: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10, paddingHorizontal: 15, borderRadius: 17, borderWidth: 1, borderColor: '#D0E2D3', backgroundColor: '#FFFFFF' },
+  findNodButtonActive: { borderColor: palette.accent, backgroundColor: palette.accent },
+  findNodCopy: { flex: 1 },
+  findNodTitle: { color: palette.text, fontSize: 15, fontWeight: '800' },
+  findNodTitleActive: { color: '#FFFFFF' },
+  findNodDetail: { color: palette.secondary, fontSize: 12, marginTop: 3 },
+  findNodDetailActive: { color: 'rgba(255,255,255,0.82)' },
+  findNodNote: { color: palette.secondary, fontSize: 11, lineHeight: 15, marginTop: 7, paddingHorizontal: 2 },
   sheetNote: { color: palette.secondary, fontSize: 14, lineHeight: 20, marginTop: 14 },
   sheetSecondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   sheetSecondaryText: { color: palette.secondary, fontSize: 15, fontWeight: '700' },

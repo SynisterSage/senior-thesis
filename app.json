@@ -56,6 +56,7 @@
         }
       ],
       "expo-sharing"
+      ,"./plugins/with-live-activity"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -24,10 +24,12 @@ TaskManager.defineTask(HIKE_LOCATION_TASK, async ({ data, error }) => {
 export async function startHikeBackgroundTracking() {
   if (Platform.OS === 'web') return false;
   try {
-    const foreground = await Location.getForegroundPermissionsAsync();
+    let foreground = await Location.getForegroundPermissionsAsync();
+    if (!foreground.granted) foreground = await Location.requestForegroundPermissionsAsync();
     if (!foreground.granted) return false;
 
-    const background = await Location.requestBackgroundPermissionsAsync();
+    let background = await Location.getBackgroundPermissionsAsync();
+    if (!background.granted) background = await Location.requestBackgroundPermissionsAsync();
     if (!background.granted) return false;
 
     const alreadyRunning = await Location.hasStartedLocationUpdatesAsync(HIKE_LOCATION_TASK);
@@ -48,8 +50,8 @@ export async function startHikeBackgroundTracking() {
     });
 
     return true;
-  } catch {
-    // Older development builds may not contain the generated background mode.
+  } catch (error) {
+    console.warn('[TrailMark] Could not start background hike tracking.', error);
     return false;
   }
 }
