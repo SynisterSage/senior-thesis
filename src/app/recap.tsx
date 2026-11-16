@@ -102,9 +102,9 @@ export default function RecapScreen() {
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducedMotion);
     return () => subscription.remove();
   }, []);
-  const save = () => {
+  const save = (overrides?: { noticeTheme: StoryNoticeThemeId; mapMood: StoryMapStyle; storyThread: string }) => {
     const additions = Object.fromEntries(Object.entries(momentAdditions).map(([key, addition]) => [key, { imageIndex: addition.image === undefined ? undefined : photoChoices.indexOf(addition.image), thought: addition.thought }]));
-    const storyUpdate = { title: title.trim() || 'Grand Prismatic Overlook', location: 'Yellowstone National Park', momentIds: ids, notes, marks, routeCoordinates: route?.geometry.coordinates ?? coordinates, noticingFocusId: params.focusId, noticingFocus, noticeTheme, mapMood, storyThread: savedStoryThread, additions };
+    const storyUpdate = { title: title.trim() || 'Grand Prismatic Overlook', location: 'Yellowstone National Park', momentIds: ids, notes, marks, routeCoordinates: route?.geometry.coordinates ?? coordinates, noticingFocusId: params.focusId, noticingFocus, noticeTheme: overrides?.noticeTheme ?? noticeTheme, mapMood: overrides?.mapMood ?? mapMood, storyThread: overrides?.storyThread ?? savedStoryThread, additions };
     if (saved) {
       updateTrailStory(saved.id, storyUpdate);
     } else {
@@ -136,7 +136,7 @@ export default function RecapScreen() {
     </ScrollView>
     <SafeAreaView edges={['bottom']} style={s.dock}><Button label={saved ? 'Save changes' : 'Save story'} onPress={save} tint={activeNoticeTheme.accent} /></SafeAreaView>
     <Modal visible={composer} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setComposer(false)}>
-      <Composer key={composerTarget} route={route} moments={moments} title={title} focus={noticingFocus} initialNoticeTheme={noticeTheme} initialMapMood={mapMood} initialStoryThread={savedStoryThread} initialActive={composerTarget} onTitle={setTitle} onClose={(nextTheme, nextMood, nextThread) => { setNoticeTheme(nextTheme); setMapMood(nextMood); setSavedStoryThread(nextThread); setComposer(false); }} reducedMotion={reducedMotion} />
+      <Composer key={composerTarget} route={route} moments={moments} title={title} focus={noticingFocus} initialNoticeTheme={noticeTheme} initialMapMood={mapMood} initialStoryThread={savedStoryThread} initialActive={composerTarget} onTitle={setTitle} onClose={(nextTheme, nextMood, nextThread) => { setNoticeTheme(nextTheme); setMapMood(nextMood); setSavedStoryThread(nextThread); setComposer(false); }} onSaveToArchive={(nextTheme, nextMood, nextThread) => save({ noticeTheme: nextTheme, mapMood: nextMood, storyThread: nextThread })} reducedMotion={reducedMotion} />
     </Modal>
     <MomentAddSheet
       key={momentAddTarget ?? 'closed'}
@@ -177,7 +177,7 @@ function MomentAddSheet({ visible, initialThought, onClose, onPhoto, onThought }
   </Modal>;
 }
 
-function Composer({ route, moments, title, focus, initialNoticeTheme, initialMapMood, initialStoryThread, initialActive, onTitle, onClose, reducedMotion }: { route: Route | null; moments: Moment[]; title: string; focus: string; initialNoticeTheme: string; initialMapMood: StoryMapStyle; initialStoryThread: string; initialActive: number; onTitle: (title: string) => void; onClose: (noticeTheme: StoryNoticeThemeId, mapMood: StoryMapStyle, storyThread: string) => void; reducedMotion: boolean }) {
+function Composer({ route, moments, title, focus, initialNoticeTheme, initialMapMood, initialStoryThread, initialActive, onTitle, onClose, onSaveToArchive, reducedMotion }: { route: Route | null; moments: Moment[]; title: string; focus: string; initialNoticeTheme: string; initialMapMood: StoryMapStyle; initialStoryThread: string; initialActive: number; onTitle: (title: string) => void; onClose: (noticeTheme: StoryNoticeThemeId, mapMood: StoryMapStyle, storyThread: string) => void; onSaveToArchive: (noticeTheme: StoryNoticeThemeId, mapMood: StoryMapStyle, storyThread: string) => void; reducedMotion: boolean }) {
   const filmRef = useRef<React.ComponentRef<typeof View>>(null);
   const stickerRef = useRef<React.ComponentRef<typeof View>>(null);
   const stickerStoryRef = useRef<React.ComponentRef<typeof View>>(null);
@@ -323,6 +323,7 @@ function Composer({ route, moments, title, focus, initialNoticeTheme, initialMap
         <Pressable accessibilityRole="button" disabled={exporting} onPress={() => { setShareOptionsOpen(false); setStickerEditorOpen(true); }} style={s.shareOption}><Text style={s.shareOptionTitle}>Make a share sticker</Text><Text style={s.shareOptionDetail}>Add a title sticker to a photo</Text></Pressable>
         <Pressable accessibilityRole="button" disabled={exporting} onPress={() => void exportImage('card', 'save')} style={s.shareOption}><Text style={s.shareOptionTitle}>Save image</Text><Text style={s.shareOptionDetail}>Save the story card to Photos</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={shareText} style={s.shareOption}><Text style={s.shareOptionTitle}>Share story text</Text><Text style={s.shareOptionDetail}>Send the written story</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => onSaveToArchive(noticingLenses[lensIndex].id as StoryNoticeThemeId, mapStyle, storyThread)} style={s.shareOption}><Text style={s.shareOptionTitle}>Save to Archive</Text><Text style={s.shareOptionDetail}>Keep this story in TrailMark</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={() => setShareOptionsOpen(false)} style={s.addCancel}><Text style={s.addCancelText}>{exporting ? 'Preparing image…' : 'Cancel'}</Text></Pressable>
       </View></View>
     </Modal>

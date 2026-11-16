@@ -58,6 +58,13 @@ const storyMomentImages = [
   require('../../assets/trails/grand-prismatic/overlook.jpg'),
 ];
 
+const preparedDemoMemories: Record<string, string> = {
+  'fairy-falls-trailhead': 'The green got darker once the trees closed in.',
+  'firehole-river-approach': 'The river looked almost black next to the pale bank.',
+  'overlook-approach': 'The trail turned dry and pale as the trees opened up.',
+  'grand-prismatic-overlook': 'The orange edge around the blue water was the part I kept looking at.',
+};
+
 const trailAnchors: TrailAnchor[] = [
   {
     title: 'Fairy Falls trailhead',
@@ -512,7 +519,7 @@ export default function HikeScreen() {
     setStoryIndex(0);
     setStoryProgressIndex(0);
     setStoryReviewing(false);
-    setStoryNote('');
+    setStoryNote(storyNotes[0] ?? preparedDemoMemories[markedMoments[0]?.momentId] ?? '');
     setStoryRevealed(false);
     setStorySheetOpen(false);
     const first = markedMoments[0];
@@ -561,7 +568,7 @@ export default function HikeScreen() {
     storyCameraTimer.current = null;
     setStoryReviewing(false);
     setStoryIndex(storyProgressIndex);
-    setStoryNote('');
+    setStoryNote(storyNotes[storyProgressIndex] ?? preparedDemoMemories[markedMoments[storyProgressIndex]?.momentId] ?? '');
     setStoryRevealed(false);
     setStorySheetOpen(false);
     storySheetOffset.setValue(420);
@@ -598,7 +605,7 @@ export default function HikeScreen() {
     }
     setStoryIndex(next);
     setStoryProgressIndex(next);
-    setStoryNote('');
+    setStoryNote(storyNotes[next] ?? preparedDemoMemories[markedMoments[next]?.momentId] ?? '');
     setStoryRevealed(false);
     setStorySheetOpen(false);
     setStoryImageIndex(0);
@@ -799,7 +806,7 @@ export default function HikeScreen() {
               <Text style={styles.markText}>{demoComplete ? 'Moments captured' : nodConnected ? 'Mark with Nod' : 'Mark moment'}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Finish hike" onPress={finishHike} style={({ pressed }) => [styles.finishButton, pressed && styles.pressed]}>
-              <Text style={styles.finishText}>Finish</Text>
+              <TrailSymbol name="flag.checkered" androidName="flag" size={21} color="#FFFFFF" />
             </Pressable>
           </Animated.View>
           <View pointerEvents="none" style={[styles.attribution, styles.attributionLight]}><Text style={[styles.attributionText, styles.attributionTextLight]}>© Mapbox · © OpenStreetMap</Text></View>
@@ -1021,7 +1028,7 @@ const styles = StyleSheet.create({
   nodSheetCopy: { flex: 1, gap: 3 },
   nodSheetTitle: { color: '#193323', fontSize: 18, fontWeight: '800', letterSpacing: -0.2 },
   nodSheetSubtitle: { color: '#4D6053', fontSize: 14, lineHeight: 20 },
-  nodSheetCount: { flexDirection: 'row', alignItems: 'baseline', gap: 7, marginTop: 20, padding: 14, borderRadius: 16, backgroundColor: '#E5F0E6' },
+  nodSheetCount: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 7, marginTop: 20, padding: 14, borderRadius: 16, backgroundColor: '#E5F0E6' },
   nodSheetCountValue: { color: '#226C4A', fontSize: 24, fontWeight: '800' },
   nodSheetCountLabel: { color: '#4D6053', fontSize: 14, fontWeight: '700' },
   nodSheetAction: { minHeight: 52, marginTop: 12, borderRadius: 16, backgroundColor: '#226C4A', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -1051,7 +1058,6 @@ const styles = StyleSheet.create({
   markButton: { flex: 1, minHeight: 56, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#A8DFB6' },
   markButtonComplete: { backgroundColor: '#DDE9E1', borderColor: '#DDE9E1' },
   markText: { color: '#193323', fontSize: 16, fontWeight: '800' },
-  finishButton: { minWidth: 94, minHeight: 56, paddingHorizontal: 18, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EB7657' },
-  finishText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  finishButton: { width: 56, minHeight: 56, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EB7657' },
   pressed: { opacity: 0.78 },
 });
